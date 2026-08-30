@@ -1,4 +1,9 @@
 import { DaykeeperApiError, DaykeeperTransportError } from "./errors.js";
+import {
+  createRequestLifetime,
+  discardResponse,
+  discardReader,
+} from "./requestLifetime.js";
 import type {
   ApplyEmailChannelResult,
   ApplyPlanInput,
@@ -26,6 +31,8 @@ const MAX_RESPONSE_BYTES = 1024 * 1024;
 
 export interface DaykeeperTokenRequest {
   forceRefresh: boolean;
+  /** Cancel credential exchange when the request is aborted or expires. */
+  signal?: AbortSignal;
 }
 
 export type DaykeeperTokenProvider = (
@@ -207,23 +214,16 @@ export class DaykeeperClient {
       signal?: AbortSignal;
     } = {},
   ): Promise<T> {
-    const timeoutController = new AbortController();
-    let timedOut = false;
-    const timeout = setTimeout(() => {
-      timedOut = true;
-      timeoutController.abort();
-    }, this.#timeoutMs);
-    const onCallerAbort = () => timeoutController.abort();
-    if (options.signal?.aborted) timeoutController.abort();
-    else
-      options.signal?.addEventListener("abort", onCallerAbort, { once: true });
+    const lifetime = createRequestLifetime(this.#timeoutMs, options.signal);
+    let response: Response | undefined;
 
     try {
-      let response: Response;
       try {
         const send = async (forceRefresh: boolean) => {
           const token = validateHeaderValue(
-            await resolveToken(this.#token, forceRefresh),
+            await lifetime.run(() =>
+              resolveToken(this.#token, forceRefresh, lifetime.signal),
+            ),
             "token",
           );
           const headers = new Headers({
@@ -239,36 +239,27 @@ export class DaykeeperClient {
               validateIdempotencyKey(options.idempotencyKey),
             );
           }
-          return this.#fetch(new URL(path.replace(/^\/+/, ""), this.#baseUrl), {
-            body:
-              options.body === undefined
-                ? undefined
-                : JSON.stringify(options.body),
-            headers,
-            method: options.method ?? "GET",
-            signal: timeoutController.signal,
-          });
+          return lifetime.run(
+            () =>
+              this.#fetch(new URL(path.replace(/^\/+/, ""), this.#baseUrl), {
+                body:
+                  options.body === undefined
+                    ? undefined
+                    : JSON.stringify(options.body),
+                headers,
+                method: options.method ?? "GET",
+                signal: lifetime.signal,
+              }),
+            discardResponse,
+          );
         };
         response = await send(false);
         if (response.status === 401 && typeof this.#token === "function") {
-          await response.body?.cancel().catch(() => undefined);
+          discardResponse(response);
           response = await send(true);
         }
       } catch (error) {
         if (error instanceof DaykeeperTransportError) throw error;
-        if (timedOut) {
-          throw new DaykeeperTransportError({
-            code: "REQUEST_TIMEOUT",
-            message: `The Daykeeper request exceeded ${this.#timeoutMs}ms`,
-            retryable: true,
-          });
-        }
-        if (options.signal?.aborted) {
-          throw new DaykeeperTransportError({
-            code: "REQUEST_ABORTED",
-            message: "The Daykeeper request was aborted",
-          });
-        }
         throw new DaykeeperTransportError({
           code: "NETWORK_ERROR",
           message: "The Daykeeper API could not be reached",
@@ -278,22 +269,9 @@ export class DaykeeperClient {
 
       let payload: unknown;
       try {
-        payload = await readJson(response);
+        payload = await readJson(response, lifetime);
       } catch (error) {
         if (error instanceof DaykeeperTransportError) throw error;
-        if (timedOut) {
-          throw new DaykeeperTransportError({
-            code: "REQUEST_TIMEOUT",
-            message: `The Daykeeper request exceeded ${this.#timeoutMs}ms`,
-            retryable: true,
-          });
-        }
-        if (options.signal?.aborted) {
-          throw new DaykeeperTransportError({
-            code: "REQUEST_ABORTED",
-            message: "The Daykeeper request was aborted",
-          });
-        }
         throw new DaykeeperTransportError({
           code: "NETWORK_ERROR",
           message: "The Daykeeper response could not be read",
@@ -310,8 +288,8 @@ export class DaykeeperClient {
       }
       return payload.data as T;
     } finally {
-      clearTimeout(timeout);
-      options.signal?.removeEventListener("abort", onCallerAbort);
+      if (response) discardResponse(response);
+      lifetime.dispose();
     }
   }
 }
@@ -319,8 +297,9 @@ export class DaykeeperClient {
 async function resolveToken(
   token: string | DaykeeperTokenProvider,
   forceRefresh: boolean,
+  signal: AbortSignal,
 ): Promise<string> {
-  return typeof token === "function" ? token({ forceRefresh }) : token;
+  return typeof token === "function" ? token({ forceRefresh, signal }) : token;
 }
 
 function parseBaseUrl(value: string): URL {
@@ -391,7 +370,10 @@ function validateIdempotencyKey(value: string): string {
   );
 }
 
-async function readJson(response: Response): Promise<unknown> {
+async function readJson(
+  response: Response,
+  lifetime: ReturnType<typeof createRequestLifetime>,
+): Promise<unknown> {
   const declaredLength = Number(response.headers.get("content-length"));
   if (Number.isFinite(declaredLength) && declaredLength > MAX_RESPONSE_BYTES) {
     throw responseTooLarge();
@@ -403,17 +385,16 @@ async function readJson(response: Response): Promise<unknown> {
   let total = 0;
   try {
     for (;;) {
-      const { done, value } = await reader.read();
+      const { done, value } = await lifetime.run(() => reader.read());
       if (done) break;
       total += value.byteLength;
       if (total > MAX_RESPONSE_BYTES) {
-        await reader.cancel();
         throw responseTooLarge();
       }
       chunks.push(value);
     }
   } finally {
-    reader.releaseLock();
+    discardReader(reader);
   }
 
   const bytes = new Uint8Array(total);

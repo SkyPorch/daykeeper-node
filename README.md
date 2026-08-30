@@ -94,6 +94,24 @@ control-plane signing key.
 separates timeouts, aborts, network failures, invalid responses, and local
 configuration errors.
 
+## Deadlines and cancellation
+
+`timeoutMs` defaults to 30 seconds (allowed range: 1–60 seconds). It is one
+budget for token acquisition, the request, its single authentication refresh,
+and response-body reads. Token providers receive an optional `signal` alongside
+`forceRefresh`; pass it to your credential exchange to cancel that work too.
+
+Pass a caller `signal` in the request options accepted by customer-session and
+plan-apply methods. Pre-aborted calls do not invoke the token provider or send a
+request. Cancellation returns `REQUEST_ABORTED`; deadline expiry returns
+`REQUEST_TIMEOUT`. A stalled provider or custom fetch cannot keep the SDK call
+pending after that deadline, and a late token cannot start a new request.
+
+Cancellation does not undo a request the server already accepted. A retryable
+transport error is not proof that a mutation is safe to repeat. Inspect the
+operation or reuse the original idempotency key where supported; the SDK does
+not automatically replay network failures or timeouts.
+
 ## Release status
 
 Version `0.1.0` is the initial contract. Its types are generated from the

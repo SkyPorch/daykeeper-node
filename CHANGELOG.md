@@ -4,6 +4,10 @@
 
 ## 0.1.1
 
+- Bound credential acquisition, authentication refresh, transport, and body
+  reads by one request deadline; propagate cancellation to token providers.
+- Prevent late dispatch after abort and release failed/late response bodies
+  without waiting for custom transport cleanup.
 - Add typed, purpose-limited customer-session exchange for trusted servers.
 - Make public SDK and contract documentation infrastructure-provider neutral.
 
