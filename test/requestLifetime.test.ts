@@ -325,7 +325,16 @@ test("credential failures cannot leak arbitrary provider errors", async () => {
       throw new Error("private provider credential");
     },
   });
-  await rejectsCode(request(), "NETWORK_ERROR");
+  await rejectsCode(request(), "TOKEN_PROVIDER_ERROR");
+});
+
+test("asynchronous credential rejection is non-retryable and redacted", async () => {
+  const request = makeRequest({
+    token: async () => {
+      throw new Error("private authentication failure");
+    },
+  });
+  await rejectsCode(request(), "TOKEN_PROVIDER_ERROR");
 });
 
 test("a cooperative credential provider preserves cancellation classification", async (t) => {

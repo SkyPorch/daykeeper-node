@@ -112,6 +112,11 @@ transport error is not proof that a mutation is safe to repeat. Inspect the
 operation or reuse the original idempotency key where supported; the SDK does
 not automatically replay network failures or timeouts.
 
+Credential-provider failures use the non-retryable `TOKEN_PROVIDER_ERROR`
+code, distinct from network failures. Raw provider errors are not exposed.
+Handle sign-in recovery in the token provider or the application; deadline and
+caller cancellation still use their dedicated error codes.
+
 ## Release status
 
 Version `0.1.0` is the initial contract. Its types are generated from the

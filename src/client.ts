@@ -299,7 +299,16 @@ async function resolveToken(
   forceRefresh: boolean,
   signal: AbortSignal,
 ): Promise<string> {
-  return typeof token === "function" ? token({ forceRefresh, signal }) : token;
+  try {
+    return await (typeof token === "function"
+      ? token({ forceRefresh, signal })
+      : token);
+  } catch {
+    throw new DaykeeperTransportError({
+      code: "TOKEN_PROVIDER_ERROR",
+      message: "The Daykeeper access token could not be obtained",
+    });
+  }
 }
 
 function parseBaseUrl(value: string): URL {
@@ -351,7 +360,12 @@ function validateHeaderValue(
   label: string,
   maxLength = 16_384,
 ): string {
-  if (!value || value.length > maxLength || /[\r\n]/.test(value)) {
+  if (
+    typeof value !== "string" ||
+    !value ||
+    value.length > maxLength ||
+    /[\r\n]/.test(value)
+  ) {
     throw configurationError(`The ${label} is invalid`);
   }
   return value;
