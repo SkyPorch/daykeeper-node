@@ -1,6 +1,6 @@
 {
   "name": "@skyporch/daykeeper",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Official TypeScript and Node.js SDK for the Daykeeper API",
   "type": "module",
   "sideEffects": false,

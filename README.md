@@ -62,8 +62,8 @@ audited, not executed against conversations, until the execution safety gate is
 delivered.
 
 Trusted application servers can exchange their management credential for a
-five-minute customer-gateway token without exposing Daykeeper or Chatwoot
-credentials to the app:
+five-minute customer-gateway token without exposing management or
+infrastructure-provider credentials to the app:
 
 ```ts
 const session = await daykeeper.customerSessions.create(tenantId, {

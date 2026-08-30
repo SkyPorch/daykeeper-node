@@ -2,7 +2,10 @@
 
 ## Unreleased
 
+## 0.1.1
+
 - Add typed, purpose-limited customer-session exchange for trusted servers.
+- Make public SDK and contract documentation infrastructure-provider neutral.
 
 ## 0.1.0
 
