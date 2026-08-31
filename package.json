@@ -21,13 +21,14 @@
   ],
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts --sourcemap --clean",
-    "check": "pnpm format:check && pnpm check:generated && pnpm typecheck && pnpm test && pnpm build && pnpm pack:check",
+    "check": "pnpm format:check && pnpm check:generated && pnpm typecheck && pnpm test && pnpm build && pnpm pack:check && pnpm test:package",
     "check:generated": "pnpm generate && git diff --exit-code -- src/generated/schema.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "generate": "openapi-typescript openapi/daykeeper.yaml --output src/generated/schema.ts",
     "pack:check": "npm pack --dry-run --json",
     "test": "tsx --test test/client.test.ts test/requestLifetime.test.ts test/website.test.ts",
+    "test:package": "node scripts/test-package.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "prepublishOnly": "node scripts/verify-release.mjs",
     "prepack": "pnpm run build"
