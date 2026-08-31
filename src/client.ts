@@ -14,6 +14,7 @@ import type {
   CustomerSession,
   DaykeeperCapabilities,
   EntitlementStatus,
+  UsageStatus,
   WebsiteChannel,
   EmailChannel,
   EmailChannelPlan,
@@ -60,6 +61,9 @@ export class DaykeeperClient {
   readonly capabilities: () => Promise<DaykeeperCapabilities>;
   readonly entitlements: {
     get: (options?: DaykeeperRequestOptions) => Promise<EntitlementStatus>;
+  };
+  readonly usage: {
+    get: (options?: DaykeeperRequestOptions) => Promise<UsageStatus>;
   };
   readonly websiteChannels: {
     get: (
@@ -138,6 +142,10 @@ export class DaykeeperClient {
     this.entitlements = {
       get: (requestOptions = {}) =>
         this.#request("/v1/entitlements", { signal: requestOptions.signal }),
+    };
+    this.usage = {
+      get: (requestOptions = {}) =>
+        this.#request("/v1/usage", { signal: requestOptions.signal }),
     };
     this.websiteChannels = {
       get: (tenantId, requestOptions = {}) =>

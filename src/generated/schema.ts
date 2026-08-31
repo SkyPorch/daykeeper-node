@@ -39,10 +39,48 @@ export interface paths {
          *     reads, not HTTP policy errors. This read neither assigns an entitlement
          *     nor reserves capacity. The one-tenant free-2026-08-31 policy is a
          *     provisional provisioning safeguard, not approved marketing pricing or
-         *     general free-tier activation. Conversation and storage metering are
-         *     explicitly not enforced.
+         *     general free-tier activation. The legacy metering fields describe this
+         *     admission-only contract, not optional provider enforcement. Use /v1/usage
+         *     for recorded resource counters; neither read proves traffic readiness.
          */
         get: operations["getEntitlements"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Inspect the current organization's recorded resource usage
+         * @description Requires organization-wide daykeeper.billing:read. Tenant-bound
+         *     credentials are rejected, including those carrying that scope. There
+         *     is no organization, tenant, period, or policy selector; query parameters
+         *     are rejected. The organization comes only from the verified principal.
+         *
+         *     This read reports committed resource-safety counters in the current UTC
+         *     calendar month, pooled across the organization's tenants in one cell.
+         *     It is not a global multi-cell total, billable usage, a delivery count,
+         *     or a resolved-conversation count. All metered message records count,
+         *     including private, activity, human and automated records. Legacy traffic
+         *     without the optional provider boundary is not retroactively metered.
+         *
+         *     Unconfigured and paused assignments are successful reads. Null limits
+         *     mean no assignment, not unlimited capacity. Zero is an actual zero
+         *     allowance. Remaining capacity is clamped at zero. A new month does not
+         *     activate traffic or guarantee a retry; writeAdmission is always
+         *     not_evaluated. Installation, identity, routing, and current write-time
+         *     admission are checked elsewhere. This endpoint does not mutate them.
+         */
+        get: operations["getUsage"];
         put?: never;
         post?: never;
         delete?: never;
@@ -422,6 +460,15 @@ export interface components {
             customerSessions: {
                 enabled: boolean;
             };
+            /** @description Optional on older servers. Inspection support does not imply scope, an assigned allowance, or traffic readiness. */
+            usage?: {
+                /** @constant */
+                inspection: true;
+                /** @constant */
+                kind: "resource_safety";
+                /** @constant */
+                scope: "organization";
+            };
             flows: {
                 /** @constant */
                 schemaVersion: "2026-08-01";
@@ -501,13 +548,70 @@ export interface components {
             assignmentVersion: number | null;
             policy: components["schemas"]["EntitlementPolicy"] | null;
             tenantProvisioning: components["schemas"]["TenantProvisioningEntitlement"];
-            /** @description These resource limits are not enforced by this implementation. */
+            /**
+             * @deprecated
+             * @description Legacy admission-only placeholders. These do not inspect optional provider enforcement; use /v1/usage for recorded resource counters, not traffic readiness.
+             */
             metering: {
                 /** @constant */
                 conversations: "not_enforced";
                 /** @constant */
                 storage: "not_enforced";
             };
+        };
+        UsageResourceStatus: {
+            /** @description Committed records counted in this UTC period; may exceed a subsequently reduced allowance. */
+            used: number;
+            /** @description Assigned provisional ceiling; null means unconfigured, never unlimited. */
+            limit: number | null;
+            /** @description max(0, limit - used), or null when unconfigured. Not permission to write. */
+            remaining: number | null;
+            /** @description used >= limit, or null when unconfigured. Zero allowance is reached even at zero usage. */
+            limitReached: boolean | null;
+        };
+        UsageStatus: {
+            /** Format: uuid */
+            organizationId: string;
+            /** @constant */
+            kind: "resource_safety";
+            /** @constant */
+            aggregation: "organization_single_cell";
+            /**
+             * Format: date-time
+             * @description Database statement time for this single committed snapshot.
+             */
+            asOf: string;
+            period: {
+                /**
+                 * Format: date-time
+                 * @description Inclusive first day of the current UTC calendar month.
+                 */
+                startsAt: string;
+                /**
+                 * Format: date-time
+                 * @description Exclusive first day of the next UTC month, not a retry guarantee.
+                 */
+                endsAt: string;
+                /** @constant */
+                timezone: "UTC";
+            };
+            /** @enum {string} */
+            state: "unconfigured" | "active" | "paused";
+            assignmentVersion: number | null;
+            policy: {
+                version: string;
+                /** @constant */
+                provisional: true;
+            } | null;
+            resources: {
+                contactRecords: components["schemas"]["UsageResourceStatus"];
+                conversationRecords: components["schemas"]["UsageResourceStatus"];
+                messageRecords: components["schemas"]["UsageResourceStatus"];
+            };
+            /** @constant */
+            writeAdmission: "not_evaluated";
+            /** @description Recovery hints for people and agents; never automatic authority to mutate policy. */
+            nextActions: string[];
         };
         TenantSpec: {
             name: string;
@@ -871,6 +975,9 @@ export interface components {
         EntitlementStatusResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["EntitlementStatus"];
         };
+        UsageStatusResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["UsageStatus"];
+        };
         TenantPlanResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["TenantPlan"];
         };
@@ -989,6 +1096,36 @@ export interface operations {
             };
             401: components["responses"]["Error"];
             /** @description The access token lacks daykeeper.accounts:read (SCOPE_REQUIRED). */
+            403: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getUsage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One committed snapshot of the authenticated organization's recorded usage. */
+            200: {
+                headers: {
+                    /** @description Usage responses, including errors, must not be cached. */
+                    "Cache-Control"?: "no-store";
+                    /** @description Correlation identifier for support. */
+                    "X-Request-Id"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageStatusResponse"];
+                };
+            };
+            /** @description Query selectors are not accepted (INVALID_INPUT). */
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            /** @description Missing billing-read scope (SCOPE_REQUIRED) or tenant-bound credential (ORGANIZATION_ACCESS_REQUIRED). Non-retryable; obtain organization-wide access. */
             403: components["responses"]["Error"];
             default: components["responses"]["Error"];
         };

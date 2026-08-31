@@ -4,6 +4,9 @@
 
 ## 0.2.0 (unreleased)
 
+- Add `usage.get()` for organization-wide resource-safety counters, with
+  cancellation and existing bounded authentication refresh. No billing,
+  assignment, reset or traffic activation operation is added.
 - Add typed organization entitlement inspection with `entitlements.get()`.
 - Accept optional website settings on the existing tenant plan and inspect
   preparation with `websiteChannels.get(tenantId)`. Prepared is not activated;

@@ -83,8 +83,9 @@ control-plane signing key.
 
 With a matching server, inspect `daykeeper.entitlements.get()` and
 `daykeeper.capabilities()` before planning a website inbox. The provisional
-Free entitlement counts tenant admission only; conversation/storage metering
-is explicitly not enforced. It is not a shipped self-serve free tier.
+Free entitlement counts tenant admission only. Its legacy `metering` fields
+do not inspect optional provider enforcement. It is not a shipped self-serve
+free tier.
 
 When `capabilities.websiteInboxes?.enabled === true`, add
 `website: { websiteUrl: "https://example.com/" }` to the existing tenant plan.
@@ -96,6 +97,24 @@ The metadata contains no provider secrets. `prepared` is not ready for traffic:
 inspect `trafficEnabled` independently; this server version always returns
 false. There is no SDK activation or credential-export method. These additions
 require a future coordinated SDK/server release and are not in npm 0.1.0.
+
+## Usage inspection (unreleased 0.2.0)
+
+```ts
+const usage = await daykeeper.usage.get({ signal: AbortSignal.timeout(5_000) });
+console.log(usage.resources.messageRecords, usage.period);
+```
+
+Requires organization-wide `daykeeper.billing:read`; tenant-bound credentials
+are rejected even with that scope. There is no organization or period selector.
+Counters are current-UTC-month resource records pooled within one cell, not
+billable resolutions. Null limits mean unconfigured, never unlimited.
+`writeAdmission: "not_evaluated"` means this read does not authorize traffic or
+prove provider enforcement. There are no policy, reset, or activation methods.
+
+An older server may omit `capabilities.usage` or return 404. Do not respond by
+creating another tenant or retrying a mutation. This method needs a coordinated
+server and SDK release; it is not present in npm 0.1.0.
 
 ## API groups
 

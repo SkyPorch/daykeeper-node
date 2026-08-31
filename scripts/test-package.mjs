@@ -88,12 +88,14 @@ try {
         assert.equal(init?.method ?? 'GET', 'GET');
         const path = new URL(input).pathname;
         paths.push(path);
-        return Response.json({ data: path.endsWith('/entitlements') ? { state: 'unconfigured' } : { state: 'prepared', trafficEnabled: false } });
+        return Response.json({ data: path.endsWith('/usage') ? { state: 'unconfigured', writeAdmission: 'not_evaluated' } : path.endsWith('/entitlements') ? { state: 'unconfigured' } : { state: 'prepared', trafficEnabled: false } });
       } });
       assert.equal((await client.entitlements.get()).state, 'unconfigured');
       assert.equal((await client.websiteChannels.get('tenant/one')).trafficEnabled, false);
-      assert.deepEqual(paths, ['/v1/entitlements', '/v1/tenants/tenant%2Fone/website-channel']);
+      assert.equal((await client.usage.get()).writeAdmission, 'not_evaluated');
+      assert.deepEqual(paths, ['/v1/entitlements', '/v1/tenants/tenant%2Fone/website-channel', '/v1/usage']);
       assert.deepEqual(Object.keys(client.websiteChannels), ['get']);
+      assert.deepEqual(Object.keys(client.usage), ['get']);
     }
   `,
   );
@@ -101,16 +103,22 @@ try {
   writeFileSync(
     path.join(directory, "consumer.mts"),
     `
-    import { DaykeeperClient, type WebsiteInboxSpec, type WebsiteChannel, type EntitlementStatus } from '@skyporch/daykeeper';
+    import { DaykeeperClient, type WebsiteInboxSpec, type WebsiteChannel, type EntitlementStatus, type UsageStatus, type UsageResourceStatus } from '@skyporch/daykeeper';
     const client = new DaykeeperClient({ baseUrl: 'https://example.test', token: 'test-token' });
     const channel: Promise<WebsiteChannel> = client.websiteChannels.get('tenant');
     const entitlements: Promise<EntitlementStatus> = client.entitlements.get();
+    const usage: Promise<UsageStatus> = client.usage.get({signal: AbortSignal.timeout(5000)});
+    const counter: UsageResourceStatus = {used:0,limit:null,remaining:null,limitReached:null};
+    // @ts-expect-error Usage does not accept an organization selector.
+    client.usage.get({organizationId:'other'});
+    // @ts-expect-error Usage does not expose a reset operation.
+    client.usage.reset();
     const spec: WebsiteInboxSpec = { websiteUrl: 'https://example.test' };
     // @ts-expect-error Provider security settings are not public overrides.
     const unsafe: WebsiteInboxSpec = { websiteUrl: 'https://example.test', hmacMandatory: false };
     // @ts-expect-error Preparation does not expose an activation operation.
     client.websiteChannels.activate('tenant');
-    void channel; void entitlements; void spec; void unsafe;
+    void channel; void entitlements; void spec; void unsafe; void usage; void counter;
   `,
   );
   writeFileSync(
@@ -119,7 +127,8 @@ try {
     import sdk = require('@skyporch/daykeeper');
     const client = new sdk.DaykeeperClient({ baseUrl: 'https://example.test', token: 'test-token' });
     const channel: Promise<sdk.WebsiteChannel> = client.websiteChannels.get('tenant');
-    void channel;
+    const usage: Promise<sdk.UsageStatus> = client.usage.get();
+    void channel; void usage;
   `,
   );
   run(process.execPath, [
