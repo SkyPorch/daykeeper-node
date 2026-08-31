@@ -4,6 +4,8 @@
 
 ## 0.1.1
 
+- Align vendored OpenAPI license metadata and record the exact source commit
+  and checksum; generated types and runtime behavior are unchanged.
 - Classify credential-provider failures as non-retryable `TOKEN_PROVIDER_ERROR`
   without exposing raw provider errors; timeout and cancellation stay distinct.
 - Bound credential acquisition, authentication refresh, transport, and body
