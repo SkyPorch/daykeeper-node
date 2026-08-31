@@ -21,6 +21,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/entitlements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Inspect the current organization's entitlements
+         * @description Requires a verified Daykeeper access token with daykeeper.accounts:read.
+         *     The organization comes only from the authenticated principal; there is
+         *     no organization selector. A tenant-bound principal with this scope also
+         *     receives organization-wide tenant occupancy, not a tenant-local count.
+         *
+         *     Unconfigured, revoked, and exhausted assignments are successful status
+         *     reads, not HTTP policy errors. This read neither assigns an entitlement
+         *     nor reserves capacity. The one-tenant free-2026-08-31 policy is a
+         *     provisional provisioning safeguard, not approved marketing pricing or
+         *     general free-tier activation. Conversation and storage metering are
+         *     explicitly not enforced.
+         */
+        get: operations["getEntitlements"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/tenant-plans": {
         parameters: {
             query?: never;
@@ -30,7 +60,16 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Plan creation of a tenant */
+        /**
+         * Plan creation of a tenant
+         * @description Optional website settings prepare the first website inbox in this same
+         *     tenant operation. Inspect websiteInboxes in capabilities first; disabled
+         *     provisioning rejects website settings with FEATURE_UNAVAILABLE. Omitting
+         *     website preserves account-only behavior. Plans with website settings
+         *     explain that preparation does not enable traffic. Existing entitlement,
+         *     idempotency and plan-expiry rules still apply. No provider identifier or
+         *     credential is returned, and preparation is not a successful client test.
+         */
         post: operations["planTenant"];
         delete?: never;
         options?: never;
@@ -50,6 +89,12 @@ export interface paths {
         /**
          * Apply a tenant creation plan
          * @description Returns the original result when the same idempotency key is replayed.
+         *     New tenant admission requires an active organization entitlement with
+         *     available tenant capacity. Planning alone reserves no capacity; apply
+         *     checks admission atomically. Every persisted tenant state counts,
+         *     including degraded, suspended, and deleting tenants. Failed provider
+         *     work does not free its reservation. Accepted apply replays bypass a
+         *     new entitlement decision; existing plan-expiry rules still apply.
          */
         post: operations["applyTenantPlan"];
         delete?: never;
@@ -166,6 +211,32 @@ export interface paths {
         };
         /** Get a tenant email channel */
         get: operations["getEmailChannel"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tenants/{tenantId}/website-channel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Inspect the tenant's first website inbox
+         * @description A non-cacheable status read, available after an accepted tenant plan
+         *     containing website settings. Prepared does not mean customer traffic is
+         *     enabled: routing, identity checks, usage enforcement and installation
+         *     verification must all pass before activation. This read never activates
+         *     a channel, returns provider credentials, or creates another inbox.
+         */
+        get: operations["getWebsiteChannel"];
         put?: never;
         post?: never;
         delete?: never;
@@ -342,6 +413,12 @@ export interface components {
             emailChannels: {
                 enabled: boolean;
             };
+            /** @description Optional on older servers. Absent or disabled means website settings are not supported. */
+            websiteInboxes?: {
+                enabled: boolean;
+                /** @description Whether self-serve traffic activation is implemented and enabled. Preparation alone is insufficient. */
+                trafficActivation: boolean;
+            };
             customerSessions: {
                 enabled: boolean;
             };
@@ -352,6 +429,86 @@ export interface components {
                 execution: "management_only";
             };
         };
+        /**
+         * @description Immutable, versioned internal admission policy. The current
+         *     free-2026-08-31 policy permits one persisted tenant per organization.
+         *     That allowance is provisional, not approved pricing or a promise of
+         *     message, storage, channel, signup, or billing capabilities. Read the
+         *     returned tenantLimit rather than hardcoding the current example value.
+         */
+        EntitlementPolicy: {
+            /**
+             * @description Immutable policy version; distinct from assignmentVersion.
+             * @example free-2026-08-31
+             */
+            version: string;
+            /** @constant */
+            plan: "free";
+            /** @constant */
+            provisional: true;
+            /** @example 1 */
+            tenantLimit: number;
+        };
+        /**
+         * @description Stable tenant-admission denial code. ENTITLEMENT_REQUIRED means no
+         *     assignment; ENTITLEMENT_INACTIVE means the assignment is revoked;
+         *     TENANT_QUOTA_EXCEEDED means persisted tenant occupancy meets or exceeds
+         *     the assigned limit. New codes may be added; an unknown denial must not
+         *     be treated as permission to provision.
+         * @enum {string}
+         */
+        TenantAdmissionDenialCode: "ENTITLEMENT_REQUIRED" | "ENTITLEMENT_INACTIVE" | "TENANT_QUOTA_EXCEEDED";
+        TenantAdmissionDenial: {
+            code: components["schemas"]["TenantAdmissionDenialCode"];
+            /** @constant */
+            retryable: false;
+            /**
+             * @description Suggested recovery actions. Current policy denials return
+             *     inspect_entitlements and contact_organization_owner.
+             * @example [
+             *       "inspect_entitlements",
+             *       "contact_organization_owner"
+             *     ]
+             */
+            nextActions: string[];
+        };
+        TenantProvisioningEntitlement: {
+            /** @constant */
+            enforced: true;
+            /** @description Whether a new tenant can currently be admitted; not a reservation. */
+            allowed: boolean;
+            /** @description Organization-wide persisted tenant count, regardless of tenant state. */
+            used: number;
+            /** @description Assigned tenant limit, or null when no entitlement is assigned. */
+            limit: number | null;
+            /**
+             * @description max(0, limit - used), or null without an assignment. Remaining
+             *     capacity alone does not authorize provisioning of a revoked plan.
+             */
+            remaining: number | null;
+            /** @description Null only when admission is currently allowed. */
+            denial: components["schemas"]["TenantAdmissionDenial"] | null;
+        };
+        EntitlementStatus: {
+            /**
+             * Format: uuid
+             * @description Organization derived from the authenticated principal.
+             */
+            organizationId: string;
+            /** @enum {string} */
+            state: "unconfigured" | "active" | "revoked";
+            /** @description Monotonic assignment version, or null without an assignment. */
+            assignmentVersion: number | null;
+            policy: components["schemas"]["EntitlementPolicy"] | null;
+            tenantProvisioning: components["schemas"]["TenantProvisioningEntitlement"];
+            /** @description These resource limits are not enforced by this implementation. */
+            metering: {
+                /** @constant */
+                conversations: "not_enforced";
+                /** @constant */
+                storage: "not_enforced";
+            };
+        };
         TenantSpec: {
             name: string;
             slug: string;
@@ -359,11 +516,47 @@ export interface components {
             region?: string;
             /** Format: email */
             supportEmail?: string;
+            website?: components["schemas"]["WebsiteInboxSpec"];
             administrator: {
                 name: string;
                 /** Format: email */
                 email: string;
             };
+        };
+        /**
+         * @description Exact HTTPS root URLs only; the scheme must be lowercase https. No
+         *     credentials, query, fragment, path, whitespace, delimiter or wildcard.
+         *     Hostnames must be valid DNS names or IP literals. The server normalizes default ports, host case and a trailing
+         *     slash. allowedOrigins defaults to the website origin; when supplied it
+         *     must include that origin and contain no duplicates after normalization.
+         *     Origins are returned in sorted canonical form. Domain settings are
+         *     not a substitute for signed customer identity or server authorization.
+         */
+        WebsiteInboxSpec: {
+            /** Format: uri */
+            websiteUrl: string;
+            allowedOrigins?: string[];
+        };
+        WebsiteChannel: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            organizationId: string;
+            /** Format: uuid */
+            tenantId: string;
+            spec: components["schemas"]["WebsiteInboxSpec"];
+            /**
+             * @description Extensible observed state. Current values are provisioning, prepared, and degraded. Treat unknown states as not ready; always inspect trafficEnabled independently.
+             * @example prepared
+             */
+            state: string;
+            /** @description False until the complete activation boundary is implemented and verified. A succeeded provisioning operation alone does not make this true. */
+            trafficEnabled: boolean;
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
         };
         Tenant: {
             /** Format: uuid */
@@ -675,6 +868,9 @@ export interface components {
         CapabilitiesResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["Capabilities"];
         };
+        EntitlementStatusResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["EntitlementStatus"];
+        };
         TenantPlanResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["TenantPlan"];
         };
@@ -689,6 +885,9 @@ export interface components {
         };
         CustomerSessionResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["CustomerSession"];
+        };
+        WebsiteChannelResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["WebsiteChannel"];
         };
         EmailChannelPlanResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["EmailChannelPlan"];
@@ -766,6 +965,34 @@ export interface operations {
             default: components["responses"]["Error"];
         };
     };
+    getEntitlements: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The authenticated organization's current admission status. */
+            200: {
+                headers: {
+                    /** @description Entitlement status must not be cached. */
+                    "Cache-Control"?: "no-store";
+                    /** @description Correlation identifier shared with support and audit logs. */
+                    "X-Request-Id"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EntitlementStatusResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            /** @description The access token lacks daykeeper.accounts:read (SCOPE_REQUIRED). */
+            403: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
     planTenant: {
         parameters: {
             query?: never;
@@ -827,6 +1054,33 @@ export interface operations {
                 };
             };
             401: components["responses"]["Error"];
+            /**
+             * @description The caller lacks the required scope, or the organization has no
+             *     assigned entitlement (ENTITLEMENT_REQUIRED) or a revoked assignment
+             *     (ENTITLEMENT_INACTIVE). Entitlement denials are not retryable until
+             *     the organization's assignment changes.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /**
+             * @description A provisioning conflict, including an exhausted tenant allowance
+             *     (TENANT_QUOTA_EXCEEDED). Quota denials are not retryable without a
+             *     capacity or assignment change; existing conflict codes still apply.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             default: components["responses"]["Error"];
         };
     };
@@ -991,6 +1245,33 @@ export interface operations {
                 };
             };
             401: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getWebsiteChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Public website-channel metadata without provider secrets. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebsiteChannelResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
             default: components["responses"]["Error"];
         };
     };

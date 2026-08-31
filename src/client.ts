@@ -13,6 +13,8 @@ import type {
   CreateCustomerSessionInput,
   CustomerSession,
   DaykeeperCapabilities,
+  EntitlementStatus,
+  WebsiteChannel,
   EmailChannel,
   EmailChannelPlan,
   EmailChannelSpec,
@@ -56,6 +58,15 @@ export interface DaykeeperApplyOptions extends DaykeeperRequestOptions {
 
 export class DaykeeperClient {
   readonly capabilities: () => Promise<DaykeeperCapabilities>;
+  readonly entitlements: {
+    get: (options?: DaykeeperRequestOptions) => Promise<EntitlementStatus>;
+  };
+  readonly websiteChannels: {
+    get: (
+      tenantId: string,
+      options?: DaykeeperRequestOptions,
+    ) => Promise<WebsiteChannel>;
+  };
   readonly tenants: {
     plan: (spec: TenantSpec) => Promise<TenantPlan>;
     apply: (
@@ -124,6 +135,16 @@ export class DaykeeperClient {
     }
 
     this.capabilities = () => this.#request("/v1/capabilities");
+    this.entitlements = {
+      get: (requestOptions = {}) =>
+        this.#request("/v1/entitlements", { signal: requestOptions.signal }),
+    };
+    this.websiteChannels = {
+      get: (tenantId, requestOptions = {}) =>
+        this.#request(`/v1/tenants/${pathSegment(tenantId)}/website-channel`, {
+          signal: requestOptions.signal,
+        }),
+    };
     this.tenants = {
       plan: (spec) =>
         this.#request("/v1/tenant-plans", { method: "POST", body: spec }),

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Daykeeper Management API
-  version: 0.1.0
+  version: 0.2.0
   summary: Safe, multi-tenant support administration for people and agents.
   description: |
     Daykeeper owns tenant lifecycle, support-channel provisioning, durable
@@ -20,12 +20,16 @@ servers:
 tags:
   - name: Capabilities
     description: Runtime feature and schema discovery.
+  - name: Entitlements
+    description: Current-organization admission policy and enforced-resource discovery.
   - name: Tenants
     description: Tenant planning, provisioning, and observed state.
   - name: Customer sessions
     description: Short-lived customer and service tokens for a tenant gateway.
   - name: Email channels
     description: Email-domain planning, DNS evidence, and round-trip readiness.
+  - name: Website channels
+    description: First-inbox preparation and observed installation readiness.
   - name: Operations
     description: Durable, inspectable provisioning work.
   - name: Flows
@@ -53,10 +57,108 @@ paths:
           $ref: "#/components/responses/Error"
         default:
           $ref: "#/components/responses/Error"
+  /v1/entitlements:
+    get:
+      operationId: getEntitlements
+      summary: Inspect the current organization's entitlements
+      description: |
+        Requires a verified Daykeeper access token with daykeeper.accounts:read.
+        The organization comes only from the authenticated principal; there is
+        no organization selector. A tenant-bound principal with this scope also
+        receives organization-wide tenant occupancy, not a tenant-local count.
+
+        Unconfigured, revoked, and exhausted assignments are successful status
+        reads, not HTTP policy errors. This read neither assigns an entitlement
+        nor reserves capacity. The one-tenant free-2026-08-31 policy is a
+        provisional provisioning safeguard, not approved marketing pricing or
+        general free-tier activation. Conversation and storage metering are
+        explicitly not enforced.
+      tags: [Entitlements]
+      security:
+        - daykeeperOAuth:
+            - daykeeper.accounts:read
+      responses:
+        "200":
+          description: The authenticated organization's current admission status.
+          headers:
+            Cache-Control:
+              description: Entitlement status must not be cached.
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              description: Correlation identifier shared with support and audit logs.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntitlementStatusResponse"
+              examples:
+                available:
+                  summary: Provisional policy with capacity for one new tenant
+                  value:
+                    data:
+                      organizationId: 10000000-0000-4000-8000-000000000001
+                      state: active
+                      assignmentVersion: 1
+                      policy:
+                        version: free-2026-08-31
+                        plan: free
+                        provisional: true
+                        tenantLimit: 1
+                      tenantProvisioning:
+                        enforced: true
+                        allowed: true
+                        used: 0
+                        limit: 1
+                        remaining: 1
+                        denial: null
+                      metering:
+                        conversations: not_enforced
+                        storage: not_enforced
+                unconfigured:
+                  summary: No assignment; reading status does not activate a plan
+                  value:
+                    data:
+                      organizationId: 10000000-0000-4000-8000-000000000001
+                      state: unconfigured
+                      assignmentVersion: null
+                      policy: null
+                      tenantProvisioning:
+                        enforced: true
+                        allowed: false
+                        used: 0
+                        limit: null
+                        remaining: null
+                        denial:
+                          code: ENTITLEMENT_REQUIRED
+                          retryable: false
+                          nextActions:
+                            - inspect_entitlements
+                            - contact_organization_owner
+                      metering:
+                        conversations: not_enforced
+                        storage: not_enforced
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+          description: The access token lacks daykeeper.accounts:read (SCOPE_REQUIRED).
+        default:
+          $ref: "#/components/responses/Error"
   /v1/tenant-plans:
     post:
       operationId: planTenant
       summary: Plan creation of a tenant
+      description: |
+        Optional website settings prepare the first website inbox in this same
+        tenant operation. Inspect websiteInboxes in capabilities first; disabled
+        provisioning rejects website settings with FEATURE_UNAVAILABLE. Omitting
+        website preserves account-only behavior. Plans with website settings
+        explain that preparation does not enable traffic. Existing entitlement,
+        idempotency and plan-expiry rules still apply. No provider identifier or
+        credential is returned, and preparation is not a successful client test.
       tags: [Tenants]
       security:
         - daykeeperOAuth:
@@ -82,7 +184,14 @@ paths:
     post:
       operationId: applyTenantPlan
       summary: Apply a tenant creation plan
-      description: Returns the original result when the same idempotency key is replayed.
+      description: |
+        Returns the original result when the same idempotency key is replayed.
+        New tenant admission requires an active organization entitlement with
+        available tenant capacity. Planning alone reserves no capacity; apply
+        checks admission atomically. Every persisted tenant state counts,
+        including degraded, suspended, and deleting tenants. Failed provider
+        work does not free its reservation. Accepted apply replays bypass a
+        new entitlement decision; existing plan-expiry rules still apply.
       tags: [Tenants]
       security:
         - daykeeperOAuth:
@@ -110,6 +219,57 @@ paths:
                 $ref: "#/components/schemas/ApplyTenantResponse"
         "401":
           $ref: "#/components/responses/Error"
+        "403":
+          description: |
+            The caller lacks the required scope, or the organization has no
+            assigned entitlement (ENTITLEMENT_REQUIRED) or a revoked assignment
+            (ENTITLEMENT_INACTIVE). Entitlement denials are not retryable until
+            the organization's assignment changes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                entitlementRequired:
+                  value:
+                    error:
+                      code: ENTITLEMENT_REQUIRED
+                      message: The organization needs an assigned entitlement before provisioning
+                      retryable: false
+                      nextActions:
+                        - inspect_entitlements
+                        - contact_organization_owner
+                      correlationId: 10000000-0000-4000-8000-000000000002
+                entitlementInactive:
+                  value:
+                    error:
+                      code: ENTITLEMENT_INACTIVE
+                      message: The organization entitlement is not active for provisioning
+                      retryable: false
+                      nextActions:
+                        - inspect_entitlements
+                        - contact_organization_owner
+                      correlationId: 10000000-0000-4000-8000-000000000002
+        "409":
+          description: |
+            A provisioning conflict, including an exhausted tenant allowance
+            (TENANT_QUOTA_EXCEEDED). Quota denials are not retryable without a
+            capacity or assignment change; existing conflict codes still apply.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                tenantQuotaExceeded:
+                  value:
+                    error:
+                      code: TENANT_QUOTA_EXCEEDED
+                      message: The organization has reached its tenant provisioning allowance
+                      retryable: false
+                      nextActions:
+                        - inspect_entitlements
+                        - contact_organization_owner
+                      correlationId: 10000000-0000-4000-8000-000000000002
         default:
           $ref: "#/components/responses/Error"
   /v1/tenants:
@@ -262,6 +422,56 @@ paths:
               schema:
                 $ref: "#/components/schemas/EmailChannelResponse"
         "401":
+          $ref: "#/components/responses/Error"
+        default:
+          $ref: "#/components/responses/Error"
+  "/v1/tenants/{tenantId}/website-channel":
+    parameters:
+      - $ref: "#/components/parameters/TenantId"
+    get:
+      operationId: getWebsiteChannel
+      summary: Inspect the tenant's first website inbox
+      description: |
+        A non-cacheable status read, available after an accepted tenant plan
+        containing website settings. Prepared does not mean customer traffic is
+        enabled: routing, identity checks, usage enforcement and installation
+        verification must all pass before activation. This read never activates
+        a channel, returns provider credentials, or creates another inbox.
+      tags: [Website channels]
+      security:
+        - daykeeperOAuth: [daykeeper.accounts:read]
+      responses:
+        "200":
+          description: Public website-channel metadata without provider secrets.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebsiteChannelResponse"
+              examples:
+                prepared:
+                  value:
+                    data:
+                      id: "30000000-0000-4000-8000-000000000001"
+                      organizationId: "10000000-0000-4000-8000-000000000001"
+                      tenantId: "20000000-0000-4000-8000-000000000001"
+                      spec:
+                        websiteUrl: https://example.test/
+                        allowedOrigins: [https://example.test]
+                      state: prepared
+                      trafficEnabled: false
+                      version: 2
+                      createdAt: "2026-08-31T00:00:00.000Z"
+                      updatedAt: "2026-08-31T00:01:00.000Z"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
           $ref: "#/components/responses/Error"
         default:
           $ref: "#/components/responses/Error"
@@ -571,6 +781,17 @@ components:
           properties:
             enabled:
               type: boolean
+        websiteInboxes:
+          type: object
+          additionalProperties: false
+          description: Optional on older servers. Absent or disabled means website settings are not supported.
+          required: [enabled, trafficActivation]
+          properties:
+            enabled:
+              type: boolean
+            trafficActivation:
+              type: boolean
+              description: Whether self-serve traffic activation is implemented and enabled. Preparation alone is insufficient.
         customerSessions:
           type: object
           additionalProperties: false
@@ -589,6 +810,132 @@ components:
             execution:
               type: string
               const: management_only
+    EntitlementPolicy:
+      type: object
+      additionalProperties: false
+      description: |
+        Immutable, versioned internal admission policy. The current
+        free-2026-08-31 policy permits one persisted tenant per organization.
+        That allowance is provisional, not approved pricing or a promise of
+        message, storage, channel, signup, or billing capabilities. Read the
+        returned tenantLimit rather than hardcoding the current example value.
+      required: [version, plan, provisional, tenantLimit]
+      properties:
+        version:
+          type: string
+          description: Immutable policy version; distinct from assignmentVersion.
+          examples: [free-2026-08-31]
+        plan:
+          type: string
+          const: free
+        provisional:
+          type: boolean
+          const: true
+        tenantLimit:
+          type: integer
+          minimum: 1
+          examples: [1]
+    TenantAdmissionDenialCode:
+      type: string
+      description: |
+        Stable tenant-admission denial code. ENTITLEMENT_REQUIRED means no
+        assignment; ENTITLEMENT_INACTIVE means the assignment is revoked;
+        TENANT_QUOTA_EXCEEDED means persisted tenant occupancy meets or exceeds
+        the assigned limit. New codes may be added; an unknown denial must not
+        be treated as permission to provision.
+      enum:
+        - ENTITLEMENT_REQUIRED
+        - ENTITLEMENT_INACTIVE
+        - TENANT_QUOTA_EXCEEDED
+    TenantAdmissionDenial:
+      type: object
+      additionalProperties: false
+      required: [code, retryable, nextActions]
+      properties:
+        code:
+          $ref: "#/components/schemas/TenantAdmissionDenialCode"
+        retryable:
+          type: boolean
+          const: false
+        nextActions:
+          type: array
+          description: |
+            Suggested recovery actions. Current policy denials return
+            inspect_entitlements and contact_organization_owner.
+          items:
+            type: string
+          examples:
+            - [inspect_entitlements, contact_organization_owner]
+    TenantProvisioningEntitlement:
+      type: object
+      additionalProperties: false
+      required: [enforced, allowed, used, limit, remaining, denial]
+      properties:
+        enforced:
+          type: boolean
+          const: true
+        allowed:
+          type: boolean
+          description: Whether a new tenant can currently be admitted; not a reservation.
+        used:
+          type: integer
+          minimum: 0
+          description: Organization-wide persisted tenant count, regardless of tenant state.
+        limit:
+          type: [integer, "null"]
+          minimum: 1
+          description: Assigned tenant limit, or null when no entitlement is assigned.
+        remaining:
+          type: [integer, "null"]
+          minimum: 0
+          description: |
+            max(0, limit - used), or null without an assignment. Remaining
+            capacity alone does not authorize provisioning of a revoked plan.
+        denial:
+          description: Null only when admission is currently allowed.
+          anyOf:
+            - $ref: "#/components/schemas/TenantAdmissionDenial"
+            - type: "null"
+    EntitlementStatus:
+      type: object
+      additionalProperties: false
+      required:
+        - organizationId
+        - state
+        - assignmentVersion
+        - policy
+        - tenantProvisioning
+        - metering
+      properties:
+        organizationId:
+          type: string
+          format: uuid
+          description: Organization derived from the authenticated principal.
+        state:
+          type: string
+          enum: [unconfigured, active, revoked]
+        assignmentVersion:
+          type: [integer, "null"]
+          minimum: 1
+          description: Monotonic assignment version, or null without an assignment.
+        policy:
+          anyOf:
+            - $ref: "#/components/schemas/EntitlementPolicy"
+            - type: "null"
+        tenantProvisioning:
+          $ref: "#/components/schemas/TenantProvisioningEntitlement"
+        metering:
+          type: object
+          additionalProperties: false
+          description: These resource limits are not enforced by this implementation.
+          required: [conversations, storage]
+          properties:
+            conversations:
+              type: string
+              const: not_enforced
+            storage:
+              type: string
+              const: not_enforced
     TenantSpec:
       type: object
       additionalProperties: false
@@ -615,6 +962,8 @@ components:
           type: string
           format: email
           maxLength: 254
+        website:
+          $ref: "#/components/schemas/WebsiteInboxSpec"
         administrator:
           type: object
           additionalProperties: false
@@ -628,6 +977,77 @@ components:
               type: string
               format: email
               maxLength: 254
+    WebsiteInboxSpec:
+      type: object
+      additionalProperties: false
+      required: [websiteUrl]
+      description: |
+        Exact HTTPS root URLs only; the scheme must be lowercase https. No
+        credentials, query, fragment, path, whitespace, delimiter or wildcard.
+        Hostnames must be valid DNS names or IP literals. The server normalizes default ports, host case and a trailing
+        slash. allowedOrigins defaults to the website origin; when supplied it
+        must include that origin and contain no duplicates after normalization.
+        Origins are returned in sorted canonical form. Domain settings are
+        not a substitute for signed customer identity or server authorization.
+      properties:
+        websiteUrl:
+          type: string
+          format: uri
+          maxLength: 2048
+          pattern: '^https://[^/?#@\s\\*;,]+/?$'
+        allowedOrigins:
+          type: array
+          minItems: 1
+          maxItems: 10
+          uniqueItems: true
+          items:
+            type: string
+            format: uri
+            maxLength: 2048
+            pattern: '^https://[^/?#@\s\\*;,]+/?$'
+    WebsiteChannel:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          id,
+          organizationId,
+          tenantId,
+          spec,
+          state,
+          trafficEnabled,
+          version,
+          createdAt,
+          updatedAt,
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        organizationId:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        spec:
+          $ref: "#/components/schemas/WebsiteInboxSpec"
+        state:
+          type: string
+          description: Extensible observed state. Current values are provisioning, prepared, and degraded. Treat unknown states as not ready; always inspect trafficEnabled independently.
+          examples: [prepared]
+        trafficEnabled:
+          type: boolean
+          description: False until the complete activation boundary is implemented and verified. A succeeded provisioning operation alone does not make this true.
+        version:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
     Tenant:
       type: object
       additionalProperties: false
@@ -1371,6 +1791,13 @@ components:
           properties:
             data:
               $ref: "#/components/schemas/Capabilities"
+    EntitlementStatusResponse:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/EntitlementStatus"
     TenantPlanResponse:
       allOf:
         - $ref: "#/components/schemas/SuccessEnvelope"
@@ -1408,6 +1835,13 @@ components:
           properties:
             data:
               $ref: "#/components/schemas/CustomerSession"
+    WebsiteChannelResponse:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/WebsiteChannel"
     EmailChannelPlanResponse:
       allOf:
         - $ref: "#/components/schemas/SuccessEnvelope"

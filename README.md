@@ -79,9 +79,29 @@ Use the separately scoped `lifecycle` and `erasure` purposes only from trusted
 service jobs. The SDK returns the short-lived token but never receives the
 control-plane signing key.
 
+## First-inbox preparation (unreleased 0.2.0)
+
+With a matching server, inspect `daykeeper.entitlements.get()` and
+`daykeeper.capabilities()` before planning a website inbox. The provisional
+Free entitlement counts tenant admission only; conversation/storage metering
+is explicitly not enforced. It is not a shipped self-serve free tier.
+
+When `capabilities.websiteInboxes?.enabled === true`, add
+`website: { websiteUrl: "https://example.com/" }` to the existing tenant plan.
+An absent capability means an older server does not support this option.
+Apply with an idempotency key, then inspect the returned operation and
+`daykeeper.websiteChannels.get(tenantId)`.
+
+The metadata contains no provider secrets. `prepared` is not ready for traffic:
+inspect `trafficEnabled` independently; this server version always returns
+false. There is no SDK activation or credential-export method. These additions
+require a future coordinated SDK/server release and are not in npm 0.1.0.
+
 ## API groups
 
 - `capabilities()`
+- `entitlements.get`
+- `websiteChannels.get`
 - `tenants.plan`, `tenants.apply`, `tenants.list`, `tenants.get`
 - `emailChannels.plan`, `emailChannels.apply`, `emailChannels.get`
 - `customerSessions.create`
@@ -101,8 +121,8 @@ budget for token acquisition, the request, its single authentication refresh,
 and response-body reads. Token providers receive an optional `signal` alongside
 `forceRefresh`; pass it to your credential exchange to cancel that work too.
 
-Pass a caller `signal` in the request options accepted by customer-session and
-plan-apply methods. Pre-aborted calls do not invoke the token provider or send a
+Pass a caller `signal` in the request options accepted by customer-session,
+plan-apply, entitlement-read and website-read methods. Pre-aborted calls do not invoke the token provider or send a
 request. Cancellation returns `REQUEST_ABORTED`; deadline expiry returns
 `REQUEST_TIMEOUT`. A stalled provider or custom fetch cannot keep the SDK call
 pending after that deadline, and a late token cannot start a new request.

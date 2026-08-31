@@ -1,6 +1,6 @@
 {
   "name": "@skyporch/daykeeper",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Official TypeScript and Node.js SDK for the Daykeeper API",
   "type": "module",
   "sideEffects": false,
@@ -27,7 +27,7 @@
     "format:check": "prettier --check .",
     "generate": "openapi-typescript openapi/daykeeper.yaml --output src/generated/schema.ts",
     "pack:check": "npm pack --dry-run --json",
-    "test": "tsx --test \"test/**/*.test.ts\"",
+    "test": "tsx --test test/client.test.ts test/requestLifetime.test.ts test/website.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "prepublishOnly": "node scripts/verify-release.mjs",
     "prepack": "pnpm run build"

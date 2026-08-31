@@ -3,6 +3,10 @@ import type { components } from "./generated/schema.js";
 type Schemas = components["schemas"];
 
 export type DaykeeperCapabilities = Schemas["Capabilities"];
+export type EntitlementStatus = Schemas["EntitlementStatus"];
+export type EntitlementPolicy = Schemas["EntitlementPolicy"];
+export type WebsiteInboxSpec = Schemas["WebsiteInboxSpec"];
+export type WebsiteChannel = Schemas["WebsiteChannel"];
 export type DaykeeperScope = Schemas["DaykeeperScope"];
 export type TenantSpec = Schemas["TenantSpec"];
 export type TenantState = Schemas["Tenant"]["state"];

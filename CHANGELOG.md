@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.2.0 (unreleased)
+
+- Add typed organization entitlement inspection with `entitlements.get()`.
+- Accept optional website settings on the existing tenant plan and inspect
+  preparation with `websiteChannels.get(tenantId)`. Prepared is not activated;
+  no routing, credentials, billing or customer traffic is enabled by the SDK.
+- Record the exact unreleased canonical contract snapshot. Existing account-only
+  and customer-session methods retain their paths and behavior.
+
 ## 0.1.1
 
 - Align vendored OpenAPI license metadata and record the exact source commit
