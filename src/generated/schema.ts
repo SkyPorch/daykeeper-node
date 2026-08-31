@@ -283,6 +283,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/tenants/{tenantId}/provisioning-operation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Find a tenant's provisioning operation
+         * @description Read the latest tenant.provision operation for this tenant within the
+         *     authenticated organization. Use this after reloading or losing an apply
+         *     response, without creating another tenant. Both read scopes and access
+         *     to this tenant are required. No query selectors are accepted.
+         *     An adopted tenant without a creation operation, or an older server,
+         *     may return 404. This read never retries work or activates customer traffic.
+         */
+        get: operations["getTenantProvisioningOperation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/operations/{operationId}": {
         parameters: {
             query?: never;
@@ -1406,6 +1433,34 @@ export interface operations {
                     "application/json": components["schemas"]["WebsiteChannelResponse"];
                 };
             };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getTenantProvisioningOperation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current durable creation operation, without changing its state. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
             404: components["responses"]["Error"];

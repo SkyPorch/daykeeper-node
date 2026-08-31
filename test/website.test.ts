@@ -118,6 +118,10 @@ test("pre-aborted preparation reads never acquire credentials or dispatch", asyn
         signal: controller.signal,
       }),
     () => client.entitlements.get({ signal: controller.signal }),
+    () =>
+      client.tenants.getProvisioningOperation(channel.tenantId, {
+        signal: controller.signal,
+      }),
   ]) {
     await assert.rejects(
       call(),
@@ -125,6 +129,75 @@ test("pre-aborted preparation reads never acquire credentials or dispatch", asyn
         error instanceof DaykeeperTransportError &&
         error.code === "REQUEST_ABORTED",
     );
+  }
+});
+
+test("tenant operation discovery preserves proxy prefixes, path encoding and read-only transport", async () => {
+  const operation = {
+    id: "operation-id",
+    organizationId: channel.organizationId,
+    tenantId: channel.tenantId,
+    kind: "tenant.provision",
+    state: "queued",
+  };
+  let calls = 0;
+  const client = new DaykeeperClient({
+    baseUrl: "https://api.example.test/daykeeper-api",
+    token: "test-management-token",
+    fetch: async (input, init) => {
+      calls++;
+      const request = new Request(input, init);
+      assert.equal(
+        request.url,
+        "https://api.example.test/daykeeper-api/v1/tenants/tenant%2Fone/provisioning-operation",
+      );
+      assert.equal(request.method, "GET");
+      assert.equal(
+        request.headers.get("authorization"),
+        "Bearer test-management-token",
+      );
+      assert.equal(await request.text(), "");
+      return Response.json({ data: operation });
+    },
+  });
+  assert.deepEqual(
+    await client.tenants.getProvisioningOperation("tenant/one"),
+    operation,
+  );
+  assert.equal(calls, 1);
+});
+
+test("tenant operation discovery preserves authorization and missing-resource errors without another write", async () => {
+  for (const [status, code] of [
+    [403, "SCOPE_REQUIRED"],
+    [404, "RESOURCE_NOT_FOUND"],
+  ] as const) {
+    let calls = 0;
+    const client = new DaykeeperClient({
+      baseUrl: "https://api.example.test",
+      token: "test-management-token",
+      fetch: async (_input, init) => {
+        calls++;
+        assert.equal(init?.method ?? "GET", "GET");
+        return Response.json(
+          {
+            error: {
+              code,
+              message: "Operation unavailable",
+              retryable: false,
+              nextActions: [],
+              correlationId: "request-1",
+            },
+          },
+          { status },
+        );
+      },
+    });
+    await assert.rejects(
+      client.tenants.getProvisioningOperation(channel.tenantId),
+      (error) => error instanceof DaykeeperApiError && error.code === code,
+    );
+    assert.equal(calls, 1);
   }
 });
 

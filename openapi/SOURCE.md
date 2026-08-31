@@ -2,10 +2,10 @@
 
 `daykeeper.yaml` is an exact copy of `openapi/daykeeper.yaml` from
 `SkyPorch/daykeeper-openapi`, commit
-`e62cfd25228565b15fe169cd7b65a3279932b59f` (organization-scoped usage inspection).
+`f2ae208de7c2c0422482d3f8b16c8c6f7542c347` (tenant provisioning operation discovery).
 
-- SHA-256: `ccdc02c537da1d88d08e6860e4fc0dbe4805ef1ca1f6ff6a0955edeee69a4fdc`
-- Source Git blob: `90ea656244ac204f70d4b1485f55379d719ce8ee`
+- SHA-256: `2d5d3db82cde8ed5c02c2774089c4f129e20536d9a8d9f52c563c01f64487bb5`
+- Source Git blob: `2224e0d8db6760607f367e5f97c9e5bf916956e7`
 - Tag status: unreleased commit snapshot; no new upstream tag is claimed.
 
 The released baseline is tag `v1.0.0`, commit
@@ -13,7 +13,9 @@ The released baseline is tag `v1.0.0`, commit
 PR #5, commit `fec6f9b88661fbfd04b7d7c66acce257f15ea6bd`.
 This snapshot retains Apache-2.0 license metadata and includes the unreleased
 organization entitlement read, optional website tenant settings, capability
-discovery, website preparation metadata and organization-only usage inspection.
+discovery, website preparation metadata, organization-only usage inspection and
+read-only tenant provisioning operation recovery. The OAuth metadata also declares
+the already-required billing-read scope; it does not grant that scope to anyone.
 Resource counters are not billable outcomes or permission to write. The snapshot
 adds no activation or billing mutation. The new SDK methods need the corresponding reviewed server version;
 older servers remain compatible with existing account-only methods.

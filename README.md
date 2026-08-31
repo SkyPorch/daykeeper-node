@@ -98,6 +98,23 @@ inspect `trafficEnabled` independently; this server version always returns
 false. There is no SDK activation or credential-export method. These additions
 require a future coordinated SDK/server release and are not in npm 0.1.0.
 
+## Provisioning recovery (unreleased 0.2.0)
+
+After a reload or lost apply response, list your tenants and recover an existing
+tenant's creation operation without submitting another write:
+
+```ts
+const operation = await daykeeper.tenants.getProvisioningOperation(tenantId, {
+  signal: AbortSignal.timeout(5_000),
+});
+console.log(operation.id, operation.state);
+```
+
+Requires both `daykeeper.accounts:read` and `daykeeper.provisioning:read` and
+access to this tenant. This read never retries work or activates traffic.
+An adopted tenant without a creation operation, or an older server, may return 404. Reconcile the original request; do not create another tenant as a fallback.
+The method needs a coordinated SDK/server release and is not in npm 0.1.0.
+
 ## Usage inspection (unreleased 0.2.0)
 
 ```ts
@@ -122,6 +139,7 @@ server and SDK release; it is not present in npm 0.1.0.
 - `entitlements.get`
 - `websiteChannels.get`
 - `tenants.plan`, `tenants.apply`, `tenants.list`, `tenants.get`
+- `tenants.getProvisioningOperation`
 - `emailChannels.plan`, `emailChannels.apply`, `emailChannels.get`
 - `customerSessions.create`
 - `operations.get`, `operations.retry`

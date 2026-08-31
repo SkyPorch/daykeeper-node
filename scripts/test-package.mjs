@@ -88,12 +88,13 @@ try {
         assert.equal(init?.method ?? 'GET', 'GET');
         const path = new URL(input).pathname;
         paths.push(path);
-        return Response.json({ data: path.endsWith('/usage') ? { state: 'unconfigured', writeAdmission: 'not_evaluated' } : path.endsWith('/entitlements') ? { state: 'unconfigured' } : { state: 'prepared', trafficEnabled: false } });
+        return Response.json({ data: path.endsWith('/provisioning-operation') ? { id: 'operation-id', kind: 'tenant.provision', state: 'queued' } : path.endsWith('/usage') ? { state: 'unconfigured', writeAdmission: 'not_evaluated' } : path.endsWith('/entitlements') ? { state: 'unconfigured' } : { state: 'prepared', trafficEnabled: false } });
       } });
       assert.equal((await client.entitlements.get()).state, 'unconfigured');
       assert.equal((await client.websiteChannels.get('tenant/one')).trafficEnabled, false);
       assert.equal((await client.usage.get()).writeAdmission, 'not_evaluated');
-      assert.deepEqual(paths, ['/v1/entitlements', '/v1/tenants/tenant%2Fone/website-channel', '/v1/usage']);
+      assert.equal((await client.tenants.getProvisioningOperation('tenant/one')).id, 'operation-id');
+      assert.deepEqual(paths, ['/v1/entitlements', '/v1/tenants/tenant%2Fone/website-channel', '/v1/usage', '/v1/tenants/tenant%2Fone/provisioning-operation']);
       assert.deepEqual(Object.keys(client.websiteChannels), ['get']);
       assert.deepEqual(Object.keys(client.usage), ['get']);
     }
@@ -103,9 +104,10 @@ try {
   writeFileSync(
     path.join(directory, "consumer.mts"),
     `
-    import { DaykeeperClient, type WebsiteInboxSpec, type WebsiteChannel, type EntitlementStatus, type UsageStatus, type UsageResourceStatus } from '@skyporch/daykeeper';
+    import { DaykeeperClient, type WebsiteInboxSpec, type WebsiteChannel, type EntitlementStatus, type UsageStatus, type UsageResourceStatus, type Operation } from '@skyporch/daykeeper';
     const client = new DaykeeperClient({ baseUrl: 'https://example.test', token: 'test-token' });
     const channel: Promise<WebsiteChannel> = client.websiteChannels.get('tenant');
+    const operation: Promise<Operation> = client.tenants.getProvisioningOperation('tenant', {signal: AbortSignal.timeout(5000)});
     const entitlements: Promise<EntitlementStatus> = client.entitlements.get();
     const usage: Promise<UsageStatus> = client.usage.get({signal: AbortSignal.timeout(5000)});
     const counter: UsageResourceStatus = {used:0,limit:null,remaining:null,limitReached:null};
@@ -118,7 +120,7 @@ try {
     const unsafe: WebsiteInboxSpec = { websiteUrl: 'https://example.test', hmacMandatory: false };
     // @ts-expect-error Preparation does not expose an activation operation.
     client.websiteChannels.activate('tenant');
-    void channel; void entitlements; void spec; void unsafe; void usage; void counter;
+    void channel; void entitlements; void spec; void unsafe; void usage; void counter; void operation;
   `,
   );
   writeFileSync(
@@ -127,8 +129,9 @@ try {
     import sdk = require('@skyporch/daykeeper');
     const client = new sdk.DaykeeperClient({ baseUrl: 'https://example.test', token: 'test-token' });
     const channel: Promise<sdk.WebsiteChannel> = client.websiteChannels.get('tenant');
+    const operation: Promise<sdk.Operation> = client.tenants.getProvisioningOperation('tenant');
     const usage: Promise<sdk.UsageStatus> = client.usage.get();
-    void channel; void usage;
+    void channel; void usage; void operation;
   `,
   );
   run(process.execPath, [

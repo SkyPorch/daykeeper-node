@@ -4,6 +4,9 @@
 
 ## 0.2.0 (unreleased)
 
+- Add cancellable `tenants.getProvisioningOperation(tenantId)` for read-only
+  recovery after a reload or lost apply response. No automatic retry, new tenant,
+  or traffic activation is performed when an operation is absent.
 - Add `usage.get()` for organization-wide resource-safety counters, with
   cancellation and existing bounded authentication refresh. No billing,
   assignment, reset or traffic activation operation is added.

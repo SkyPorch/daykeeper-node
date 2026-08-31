@@ -79,6 +79,10 @@ export class DaykeeperClient {
     ) => Promise<ApplyTenantResult>;
     list: () => Promise<readonly Tenant[]>;
     get: (tenantId: string) => Promise<Tenant>;
+    getProvisioningOperation: (
+      tenantId: string,
+      options?: DaykeeperRequestOptions,
+    ) => Promise<Operation>;
   };
   readonly emailChannels: {
     plan: (
@@ -165,6 +169,13 @@ export class DaykeeperClient {
         }),
       list: () => this.#request("/v1/tenants"),
       get: (tenantId) => this.#request(`/v1/tenants/${pathSegment(tenantId)}`),
+      getProvisioningOperation: (tenantId, requestOptions = {}) =>
+        this.#request(
+          `/v1/tenants/${pathSegment(tenantId)}/provisioning-operation`,
+          {
+            signal: requestOptions.signal,
+          },
+        ),
     };
     this.emailChannels = {
       plan: (tenantId, spec) =>
