@@ -13,6 +13,11 @@ function run(command, args, cwd = directory) {
     encoding: "utf8",
     timeout: 60_000,
     maxBuffer: 4 * 1024 * 1024,
+    env: {
+      ...process.env,
+      npm_config_cache: path.join(directory, "npm-cache"),
+      npm_config_update_notifier: "false",
+    },
   });
   assert.ifError(result.error);
   assert.equal(
