@@ -58,7 +58,9 @@ export function createRequestLifetime(timeoutMs: number, caller?: AbortSignal) {
           })
           .then(
             (value) => {
-              checkDeadline();
+              // Test settlement first: work that already produced a value must
+              // not be discarded by a deadline that expired while it resolved.
+              // The next lifetime.run() still refuses to start late work.
               if (settled) {
                 try {
                   onLateValue?.(value);
