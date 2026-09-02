@@ -133,10 +133,61 @@ An older server may omit `capabilities.usage` or return 404. Do not respond by
 creating another tenant or retrying a mutation. This method needs a coordinated
 server and SDK release; it is not present in npm 0.1.0.
 
+## Agent credentials (unreleased 0.2.0)
+
+Hosted OAuth is the preferred workload identity. When a headless environment
+cannot complete OAuth, a current human organization owner can create a named,
+expiring credential with only the scopes that workload needs:
+
+```ts
+const result = await daykeeper.agentCredentials.create(
+  {
+    name: "Production MCP",
+    scopes: [
+      "daykeeper.accounts:read",
+      "daykeeper.flows:read",
+      "daykeeper.provisioning:read",
+    ],
+    validityDays: 30,
+  },
+  { idempotencyKey: crypto.randomUUID() },
+);
+
+if (result.token) {
+  // Show or transfer it once, then put it in a secret manager.
+  // Do not log it, persist it in source, or pass it on a command line.
+}
+```
+
+Use the saved credential only from a trusted server or workload:
+
+```ts
+const agent = new DaykeeperClient({
+  baseUrl: process.env.DAYKEEPER_API_URL!,
+  apiKey: process.env.DAYKEEPER_API_KEY!,
+});
+```
+
+`apiKey` is the conventional static-credential path. Use `token` with a token
+provider for hosted OAuth and rotation; configure exactly one of them.
+
+`agentCredentials.list()` returns bounded metadata only. Revoke immediately with
+`agentCredentials.revoke(id)`. A repeated exact create request returns the
+original metadata with `token: null`; Daykeeper cannot recover the original
+secret. After an uncertain response, inspect the list and repeat only the exact
+approved request with the same idempotency key. Never create a different
+credential as an automatic retry.
+
+Agent credentials cannot delegate credential administration, member changes,
+customer lifecycle, or erasure. This API requires a future coordinated
+SDK/server release and a server with `capabilities.agentCredentials.enabled`;
+it is not present in npm 0.1.0 and this source change does not enable it.
+
 ## API groups
 
 - `capabilities()`
 - `entitlements.get`
+- `agentCredentials.list`, `agentCredentials.create`, `agentCredentials.revoke`
 - `websiteChannels.get`
 - `tenants.plan`, `tenants.apply`, `tenants.list`, `tenants.get`
 - `tenants.getProvisioningOperation`
@@ -159,7 +210,7 @@ and response-body reads. Token providers receive an optional `signal` alongside
 `forceRefresh`; pass it to your credential exchange to cancel that work too.
 
 Pass a caller `signal` in the request options accepted by customer-session,
-plan-apply, entitlement-read and website-read methods. Pre-aborted calls do not invoke the token provider or send a
+plan-apply, agent-credential, entitlement-read and website-read methods. Pre-aborted calls do not invoke the token provider or send a
 request. Cancellation returns `REQUEST_ABORTED`; deadline expiry returns
 `REQUEST_TIMEOUT`. A stalled provider or custom fetch cannot keep the SDK call
 pending after that deadline, and a late token cannot start a new request.

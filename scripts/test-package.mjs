@@ -84,7 +84,7 @@ try {
     const { DaykeeperClient: CjsClient } = createRequire(import.meta.url)('@skyporch/daykeeper');
     for (const Client of [EsmClient, CjsClient]) {
       const paths = [];
-      const client = new Client({ baseUrl: 'https://api.example.test', token: 'synthetic-token', fetch: async (input, init) => {
+      const client = new Client({ baseUrl: 'https://api.example.test', apiKey: 'synthetic-api-key', fetch: async (input, init) => {
         assert.equal(init?.method ?? 'GET', 'GET');
         const path = new URL(input).pathname;
         paths.push(path);
@@ -97,6 +97,7 @@ try {
       assert.deepEqual(paths, ['/v1/entitlements', '/v1/tenants/tenant%2Fone/website-channel', '/v1/usage', '/v1/tenants/tenant%2Fone/provisioning-operation']);
       assert.deepEqual(Object.keys(client.websiteChannels), ['get']);
       assert.deepEqual(Object.keys(client.usage), ['get']);
+      assert.deepEqual(Object.keys(client.agentCredentials), ['list', 'create', 'revoke']);
     }
   `,
   );
@@ -104,12 +105,15 @@ try {
   writeFileSync(
     path.join(directory, "consumer.mts"),
     `
-    import { DaykeeperClient, type WebsiteInboxSpec, type WebsiteChannel, type EntitlementStatus, type UsageStatus, type UsageResourceStatus, type Operation } from '@skyporch/daykeeper';
+    import { DaykeeperClient, type AgentCredentialPage, type CreateAgentCredentialResult, type WebsiteInboxSpec, type WebsiteChannel, type EntitlementStatus, type UsageStatus, type UsageResourceStatus, type Operation } from '@skyporch/daykeeper';
     const client = new DaykeeperClient({ baseUrl: 'https://example.test', token: 'test-token' });
+    const agent = new DaykeeperClient({ baseUrl: 'https://example.test', apiKey: 'test-api-key' });
     const channel: Promise<WebsiteChannel> = client.websiteChannels.get('tenant');
     const operation: Promise<Operation> = client.tenants.getProvisioningOperation('tenant', {signal: AbortSignal.timeout(5000)});
     const entitlements: Promise<EntitlementStatus> = client.entitlements.get();
     const usage: Promise<UsageStatus> = client.usage.get({signal: AbortSignal.timeout(5000)});
+    const credentials: Promise<AgentCredentialPage> = client.agentCredentials.list({signal: AbortSignal.timeout(5000)});
+    const created: Promise<CreateAgentCredentialResult> = client.agentCredentials.create({name:'Production MCP',scopes:['daykeeper.accounts:read']},{idempotencyKey:'credential-create-0001'});
     const counter: UsageResourceStatus = {used:0,limit:null,remaining:null,limitReached:null};
     // @ts-expect-error Usage does not accept an organization selector.
     client.usage.get({organizationId:'other'});
@@ -120,7 +124,11 @@ try {
     const unsafe: WebsiteInboxSpec = { websiteUrl: 'https://example.test', hmacMandatory: false };
     // @ts-expect-error Preparation does not expose an activation operation.
     client.websiteChannels.activate('tenant');
-    void channel; void entitlements; void spec; void unsafe; void usage; void counter; void operation;
+    // @ts-expect-error Static API keys and OAuth tokens are mutually exclusive.
+    new DaykeeperClient({baseUrl:'https://example.test',apiKey:'key',token:'token'});
+    // @ts-expect-error Agent credentials cannot delegate credential administration.
+    client.agentCredentials.create({name:'Overbroad',scopes:['daykeeper.credentials:write']},{idempotencyKey:'credential-create-0002'});
+    void channel; void entitlements; void spec; void unsafe; void usage; void counter; void operation; void credentials; void created;
   `,
   );
   writeFileSync(
@@ -131,7 +139,9 @@ try {
     const channel: Promise<sdk.WebsiteChannel> = client.websiteChannels.get('tenant');
     const operation: Promise<sdk.Operation> = client.tenants.getProvisioningOperation('tenant');
     const usage: Promise<sdk.UsageStatus> = client.usage.get();
-    void channel; void usage; void operation;
+    const agent = new sdk.DaykeeperClient({ baseUrl: 'https://example.test', apiKey: 'test-api-key' });
+    const credentials: Promise<sdk.AgentCredentialPage> = client.agentCredentials.list();
+    void channel; void usage; void operation; void credentials;
   `,
   );
   run(process.execPath, [

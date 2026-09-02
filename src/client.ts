@@ -8,6 +8,9 @@ import type {
   ApplyEmailChannelResult,
   ApplyPlanInput,
   ApplyTenantResult,
+  AgentCredentialPage,
+  CreateAgentCredentialInput,
+  CreateAgentCredentialResult,
   CreateFlowInput,
   CreateFlowVersionInput,
   CreateCustomerSessionInput,
@@ -24,6 +27,7 @@ import type {
   FlowWithVersion,
   Operation,
   PublishFlowVersionInput,
+  RevokeAgentCredentialResult,
   Tenant,
   TenantPlan,
   TenantSpec,
@@ -42,12 +46,25 @@ export type DaykeeperTokenProvider = (
   request?: DaykeeperTokenRequest,
 ) => string | Promise<string>;
 
-export interface DaykeeperClientOptions {
+interface DaykeeperClientBaseOptions {
   baseUrl: string;
-  token: string | DaykeeperTokenProvider;
   fetch?: typeof globalThis.fetch;
   timeoutMs?: number;
 }
+
+export type DaykeeperClientOptions = DaykeeperClientBaseOptions &
+  (
+    | {
+        /** Static server-side credential, including a reveal-once agent API key. */
+        apiKey: string;
+        token?: never;
+      }
+    | {
+        /** OAuth access token or rotating token provider. */
+        token: string | DaykeeperTokenProvider;
+        apiKey?: never;
+      }
+  );
 
 export interface DaykeeperRequestOptions {
   signal?: AbortSignal;
@@ -57,6 +74,8 @@ export interface DaykeeperApplyOptions extends DaykeeperRequestOptions {
   idempotencyKey: string;
 }
 
+export type DaykeeperIdempotencyOptions = DaykeeperApplyOptions;
+
 export class DaykeeperClient {
   readonly capabilities: () => Promise<DaykeeperCapabilities>;
   readonly entitlements: {
@@ -64,6 +83,17 @@ export class DaykeeperClient {
   };
   readonly usage: {
     get: (options?: DaykeeperRequestOptions) => Promise<UsageStatus>;
+  };
+  readonly agentCredentials: {
+    list: (options?: DaykeeperRequestOptions) => Promise<AgentCredentialPage>;
+    create: (
+      input: CreateAgentCredentialInput,
+      options: DaykeeperIdempotencyOptions,
+    ) => Promise<CreateAgentCredentialResult>;
+    revoke: (
+      credentialId: string,
+      options?: DaykeeperRequestOptions,
+    ) => Promise<RevokeAgentCredentialResult>;
   };
   readonly websiteChannels: {
     get: (
@@ -137,9 +167,17 @@ export class DaykeeperClient {
       throw configurationError("A Fetch API implementation is required");
     }
     this.#timeoutMs = validateTimeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
-    this.#token = options.token;
+    const hasApiKey =
+      "apiKey" in options && typeof options.apiKey !== "undefined";
+    const hasToken = "token" in options && typeof options.token !== "undefined";
+    if (hasApiKey === hasToken) {
+      throw configurationError("Provide exactly one apiKey or token");
+    }
+    this.#token = hasApiKey ? options.apiKey : options.token;
     if (typeof this.#token !== "string" && typeof this.#token !== "function") {
-      throw configurationError("A token or token provider is required");
+      throw configurationError(
+        "A valid apiKey, token, or token provider is required",
+      );
     }
 
     this.capabilities = () => this.#request("/v1/capabilities");
@@ -150,6 +188,28 @@ export class DaykeeperClient {
     this.usage = {
       get: (requestOptions = {}) =>
         this.#request("/v1/usage", { signal: requestOptions.signal }),
+    };
+    this.agentCredentials = {
+      list: (requestOptions = {}) =>
+        this.#request("/v1/agent-credentials", {
+          signal: requestOptions.signal,
+        }),
+      create: (input, requestOptions) =>
+        this.#request("/v1/agent-credentials", {
+          method: "POST",
+          body: input,
+          idempotencyKey: requestOptions.idempotencyKey,
+          signal: requestOptions.signal,
+        }),
+      revoke: (credentialId, requestOptions = {}) =>
+        this.#request(
+          `/v1/agent-credentials/${pathSegment(credentialId)}/revoke`,
+          {
+            method: "POST",
+            body: {},
+            signal: requestOptions.signal,
+          },
+        ),
     };
     this.websiteChannels = {
       get: (tenantId, requestOptions = {}) =>

@@ -104,6 +104,229 @@ test("sends idempotency keys separately from apply bodies", async () => {
   });
 });
 
+test("creates reveal-once agent credentials with explicit idempotency", async () => {
+  let request: Request | undefined;
+  const credential = {
+    id: "30000000-0000-4000-8000-000000000001",
+    organizationId: "10000000-0000-4000-8000-000000000001",
+    name: "Production MCP",
+    hint: "dk_agent_30000000…CQkJ",
+    scopes: ["daykeeper.accounts:read" as const],
+    state: "active" as const,
+    expiresAt: "2026-10-01T00:00:00.000Z",
+    lastUsedAt: null,
+    revokedAt: null,
+    createdAt: "2026-09-01T00:00:00.000Z",
+  };
+  const client = new DaykeeperClient({
+    baseUrl: "https://api.daykeeper.example",
+    token: "owner-token",
+    fetch: async (input, init) => {
+      request = new Request(input, init);
+      return Response.json(
+        {
+          data: {
+            credential,
+            token: `dk_agent_${credential.id.replaceAll("-", "")}_${"A".repeat(43)}`,
+            replayed: false,
+          },
+        },
+        { status: 201 },
+      );
+    },
+  });
+
+  const result = await client.agentCredentials.create(
+    {
+      name: "Production MCP",
+      scopes: ["daykeeper.accounts:read"],
+      validityDays: 30,
+    },
+    { idempotencyKey: "credential-create-0001" },
+  );
+
+  assert.equal(
+    request?.url,
+    "https://api.daykeeper.example/v1/agent-credentials",
+  );
+  assert.equal(request?.method, "POST");
+  assert.equal(request?.headers.get("authorization"), "Bearer owner-token");
+  assert.equal(
+    request?.headers.get("idempotency-key"),
+    "credential-create-0001",
+  );
+  assert.deepEqual(await request?.json(), {
+    name: "Production MCP",
+    scopes: ["daykeeper.accounts:read"],
+    validityDays: 30,
+  });
+  assert.equal(result.credential.id, credential.id);
+  assert.match(result.token ?? "", /^dk_agent_/);
+  assert.equal(result.replayed, false);
+});
+
+test("accepts a conventional apiKey without weakening OAuth token providers", async () => {
+  let authorization: string | null = null;
+  const client = new DaykeeperClient({
+    baseUrl: "https://api.daykeeper.example",
+    apiKey: "dk_agent_static-example",
+    fetch: async (input, init) => {
+      authorization = new Request(input, init).headers.get("authorization");
+      return Response.json({ data: { items: [], hasMore: false } });
+    },
+  });
+
+  await client.agentCredentials.list();
+  assert.equal(authorization, "Bearer dk_agent_static-example");
+  assert.throws(
+    () =>
+      new DaykeeperClient({
+        baseUrl: "https://api.daykeeper.example",
+        apiKey: "api-key",
+        token: "oauth-token",
+        fetch,
+      } as unknown as ConstructorParameters<typeof DaykeeperClient>[0]),
+    (error) =>
+      error instanceof DaykeeperTransportError &&
+      error.code === "INVALID_CONFIGURATION",
+  );
+});
+
+test("preserves null secrets on exact agent credential create replays", async () => {
+  const client = new DaykeeperClient({
+    baseUrl: "https://api.daykeeper.example",
+    token: "owner-token",
+    fetch: async () =>
+      Response.json({
+        data: {
+          credential: {
+            id: "30000000-0000-4000-8000-000000000001",
+            organizationId: "10000000-0000-4000-8000-000000000001",
+            name: "Production MCP",
+            hint: "dk_agent_30000000…CQkJ",
+            scopes: ["daykeeper.accounts:read"],
+            state: "active",
+            expiresAt: "2026-10-01T00:00:00.000Z",
+            lastUsedAt: null,
+            revokedAt: null,
+            createdAt: "2026-09-01T00:00:00.000Z",
+          },
+          token: null,
+          replayed: true,
+        },
+      }),
+  });
+
+  const result = await client.agentCredentials.create(
+    { name: "Production MCP", scopes: ["daykeeper.accounts:read"] },
+    { idempotencyKey: "credential-create-0001" },
+  );
+
+  assert.equal(result.token, null);
+  assert.equal(result.replayed, true);
+});
+
+test("lists metadata and revokes without sending or recovering secrets", async () => {
+  const requests: Request[] = [];
+  const credential = {
+    id: "30000000-0000-4000-8000-000000000001",
+    organizationId: "10000000-0000-4000-8000-000000000001",
+    name: "Production MCP",
+    hint: "dk_agent_30000000…CQkJ",
+    scopes: ["daykeeper.accounts:read" as const],
+    state: "active" as const,
+    expiresAt: "2026-10-01T00:00:00.000Z",
+    lastUsedAt: null,
+    revokedAt: null,
+    createdAt: "2026-09-01T00:00:00.000Z",
+  };
+  const client = new DaykeeperClient({
+    baseUrl: "https://api.daykeeper.example",
+    token: "owner-token",
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      requests.push(request);
+      if (request.method === "GET") {
+        return Response.json({ data: { items: [credential], hasMore: false } });
+      }
+      return Response.json({
+        data: {
+          credential: {
+            ...credential,
+            state: "revoked",
+            revokedAt: "2026-09-02T00:00:00.000Z",
+          },
+          replayed: false,
+        },
+      });
+    },
+  });
+
+  const page = await client.agentCredentials.list();
+  const revoked = await client.agentCredentials.revoke(credential.id);
+
+  assert.deepEqual(page, { items: [credential], hasMore: false });
+  assert.equal("token" in page.items[0], false);
+  assert.equal(revoked.credential.state, "revoked");
+  assert.deepEqual(
+    requests.map((item) => [item.method, item.url]),
+    [
+      ["GET", "https://api.daykeeper.example/v1/agent-credentials"],
+      [
+        "POST",
+        `https://api.daykeeper.example/v1/agent-credentials/${credential.id}/revoke`,
+      ],
+    ],
+  );
+  assert.deepEqual(await requests[1]?.json(), {});
+  assert.equal(requests[1]?.headers.has("idempotency-key"), false);
+});
+
+test("does not automatically retry an uncertain agent credential create", async () => {
+  let calls = 0;
+  const client = new DaykeeperClient({
+    baseUrl: "https://api.daykeeper.example",
+    token: "owner-token",
+    fetch: async () => {
+      calls += 1;
+      throw new Error("synthetic uncertain response");
+    },
+  });
+
+  await assert.rejects(
+    client.agentCredentials.create(
+      { name: "Production MCP", scopes: ["daykeeper.accounts:read"] },
+      { idempotencyKey: "credential-create-0001" },
+    ),
+    (error) =>
+      error instanceof DaykeeperTransportError &&
+      error.code === "NETWORK_ERROR",
+  );
+  assert.equal(calls, 1);
+});
+
+test("supports cancelling agent credential operations", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  let called = false;
+  const client = new DaykeeperClient({
+    baseUrl: "https://api.daykeeper.example",
+    token: "owner-token",
+    fetch: async () => {
+      called = true;
+      return Response.json({ data: {} });
+    },
+  });
+
+  await assert.rejects(
+    client.agentCredentials.list({ signal: controller.signal }),
+    (error) =>
+      error instanceof DaykeeperTransportError &&
+      error.code === "REQUEST_ABORTED",
+  );
+  assert.equal(called, false);
+});
+
 test("refreshes a provider token once after an authentication rejection", async () => {
   const tokenRequests: boolean[] = [];
   const authorization: (string | null)[] = [];

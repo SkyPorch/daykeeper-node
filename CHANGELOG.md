@@ -4,6 +4,10 @@
 
 ## 0.2.0 (unreleased)
 
+- Add typed agent credential list, reveal-once create, and revoke methods with
+  explicit idempotency, cancellation, bounded metadata, and no automatic retry.
+- Accept a mutually exclusive `apiKey` constructor option for static server-side
+  credentials while retaining `token` and rotating token providers for OAuth.
 - Add cancellable `tenants.getProvisioningOperation(tenantId)` for read-only
   recovery after a reload or lost apply response. No automatic retry, new tenant,
   or traffic activation is performed when an operation is absent.

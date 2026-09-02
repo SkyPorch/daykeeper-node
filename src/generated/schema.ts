@@ -89,6 +89,72 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/agent-credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the current organization's agent credentials
+         * @description Requires a current human organization owner and
+         *     daykeeper.credentials:read. The organization comes only from the
+         *     verified principal; no organization, pagination, or filter selector is
+         *     accepted. Up to 100 bounded metadata records are returned, with all
+         *     active credentials ahead of recent inactive history. `hasMore` reports
+         *     omitted older history. Tokens and token hashes are never returned.
+         *
+         *     Hosted OAuth remains the preferred workload identity. This list does
+         *     not create, renew, recover, rotate, or reactivate a credential.
+         */
+        get: operations["listAgentCredentials"];
+        put?: never;
+        /**
+         * Create a reveal-once agent credential
+         * @description Requires a current human organization owner and
+         *     daykeeper.credentials:write. The same Idempotency-Key may be submitted
+         *     again only with the exact original body to reconcile an uncertain
+         *     response. A fresh write returns the token exactly once. A successful
+         *     replay returns the original metadata with `token: null`; no secret can
+         *     be recovered. Do not automatically retry this mutation with a new key.
+         *
+         *     The credential expires, cannot administer credentials or members, and
+         *     can receive only the explicitly selected delegable scopes. Hosted OAuth
+         *     remains the preferred workload identity.
+         */
+        post: operations["createAgentCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-credentials/{agentCredentialId}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agentCredentialId: components["parameters"]["AgentCredentialId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke an agent credential
+         * @description Requires a current human organization owner and
+         *     daykeeper.credentials:write. Revocation atomically disables the
+         *     underlying principal grant and is safe to repeat. It never creates,
+         *     replaces, recovers, or returns a secret.
+         */
+        post: operations["revokeAgentCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/tenant-plans": {
         parameters: {
             query?: never;
@@ -495,6 +561,14 @@ export interface components {
                 kind: "resource_safety";
                 /** @constant */
                 scope: "organization";
+            };
+            /** @description Optional on older servers. Enabled discovery does not grant owner authority or credential scopes. */
+            agentCredentials?: {
+                enabled: boolean;
+                /** @constant */
+                reveal: "once";
+                /** @constant */
+                maximumValidityDays: 90;
             };
             flows: {
                 /** @constant */
@@ -983,8 +1057,58 @@ export interface components {
         PublishFlowVersionInput: {
             expectedResourceVersion: number;
         };
+        /**
+         * @description A scope that a human owner may delegate to a headless agent credential.
+         * @enum {string}
+         */
+        AgentCredentialScope: "daykeeper.accounts:read" | "daykeeper.accounts:write" | "daykeeper.flows:read" | "daykeeper.flows:write" | "daykeeper.flows:publish" | "daykeeper.provisioning:read" | "daykeeper.provisioning:apply" | "daykeeper.billing:read";
+        AgentCredential: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: uuid
+             * @description Organization derived from the authenticated owner.
+             */
+            organizationId: string;
+            name: string;
+            /** @description Bounded display hint; never usable as a bearer credential. */
+            hint: string;
+            scopes: components["schemas"]["AgentCredentialScope"][];
+            /** @enum {string} */
+            state: "active" | "expired" | "revoked";
+            /** Format: date-time */
+            expiresAt: string;
+            /** Format: date-time */
+            lastUsedAt: string | null;
+            /** Format: date-time */
+            revokedAt: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        AgentCredentialPage: {
+            items: components["schemas"]["AgentCredential"][];
+            /** @description True when older inactive history was omitted. */
+            hasMore: boolean;
+        };
+        CreateAgentCredentialInput: {
+            name: string;
+            scopes: components["schemas"]["AgentCredentialScope"][];
+            /** @default 30 */
+            validityDays: number;
+        };
+        /** @description A fresh result has a token and replayed false; a replay has token null and replayed true. */
+        CreateAgentCredentialResult: {
+            credential: components["schemas"]["AgentCredential"];
+            /** @description Sensitive bearer token revealed only on the original successful response. Never log or persist it outside a secret manager. */
+            token: string | null;
+            replayed: boolean;
+        };
+        RevokeAgentCredentialResult: {
+            credential: components["schemas"]["AgentCredential"];
+            replayed: boolean;
+        };
         /** @enum {string} */
-        DaykeeperScope: "daykeeper.accounts:read" | "daykeeper.accounts:write" | "daykeeper.flows:read" | "daykeeper.flows:write" | "daykeeper.flows:publish" | "daykeeper.provisioning:read" | "daykeeper.provisioning:apply" | "daykeeper.customer-sessions:write" | "daykeeper.lifecycle:write" | "daykeeper.customers:delete";
+        DaykeeperScope: "daykeeper.accounts:read" | "daykeeper.accounts:write" | "daykeeper.billing:read" | "daykeeper.credentials:read" | "daykeeper.credentials:write" | "daykeeper.flows:read" | "daykeeper.flows:write" | "daykeeper.flows:publish" | "daykeeper.provisioning:read" | "daykeeper.provisioning:apply" | "daykeeper.customer-sessions:write" | "daykeeper.lifecycle:write" | "daykeeper.customers:delete";
         ErrorDetail: {
             code: string;
             message: string;
@@ -1004,6 +1128,15 @@ export interface components {
         };
         UsageStatusResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["UsageStatus"];
+        };
+        AgentCredentialPageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["AgentCredentialPage"];
+        };
+        CreateAgentCredentialResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["CreateAgentCredentialResult"];
+        };
+        RevokeAgentCredentialResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["RevokeAgentCredentialResult"];
         };
         TenantPlanResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["TenantPlan"];
@@ -1070,6 +1203,7 @@ export interface components {
         OperationId: string;
         FlowId: string;
         FlowVersionNumber: number;
+        AgentCredentialId: string;
     };
     requestBodies: never;
     headers: never;
@@ -1154,6 +1288,121 @@ export interface operations {
             401: components["responses"]["Error"];
             /** @description Missing billing-read scope (SCOPE_REQUIRED) or tenant-bound credential (ORGANIZATION_ACCESS_REQUIRED). Non-retryable; obtain organization-wide access. */
             403: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listAgentCredentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded credential metadata for the authenticated organization. */
+            200: {
+                headers: {
+                    /** @description Credential metadata must not be cached. */
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentCredentialPageResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            /** @description Missing credential-read scope or current human owner authority. */
+            403: components["responses"]["Error"];
+            /** @description Agent credential management is not enabled (FEATURE_UNAVAILABLE). */
+            503: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    createAgentCredential: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description A caller-generated key reused only for an exact logical mutation. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAgentCredentialInput"];
+            };
+        };
+        responses: {
+            /** @description The exact original request was replayed; the secret is no longer available. */
+            200: {
+                headers: {
+                    /** @description Reveal-once results must not be cached. */
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateAgentCredentialResponse"];
+                };
+            };
+            /** @description A credential was created and its secret is revealed exactly once. */
+            201: {
+                headers: {
+                    /** @description Reveal-once results must not be cached. */
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateAgentCredentialResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            /** @description Missing credential-write scope or current human owner authority. */
+            403: components["responses"]["Error"];
+            /** @description Idempotency input changed or the active credential limit was reached. */
+            409: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+            /** @description Agent credential management is not enabled (FEATURE_UNAVAILABLE). */
+            503: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    revokeAgentCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agentCredentialId: components["parameters"]["AgentCredentialId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description The credential is revoked, including an idempotent replay. */
+            200: {
+                headers: {
+                    /** @description Credential mutation results must not be cached. */
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevokeAgentCredentialResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            /** @description Missing credential-write scope or current human owner authority. */
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            /** @description Agent credential management is not enabled (FEATURE_UNAVAILABLE). */
+            503: components["responses"]["Error"];
             default: components["responses"]["Error"];
         };
     };

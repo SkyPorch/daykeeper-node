@@ -7,6 +7,23 @@ export type EntitlementStatus = Schemas["EntitlementStatus"];
 export type EntitlementPolicy = Schemas["EntitlementPolicy"];
 export type UsageStatus = Schemas["UsageStatus"];
 export type UsageResourceStatus = Schemas["UsageResourceStatus"];
+export type AgentCredentialScope = Schemas["AgentCredentialScope"];
+export type AgentCredentialState = Schemas["AgentCredential"]["state"];
+export type AgentCredential = Schemas["AgentCredential"];
+export type AgentCredentialPage = Schemas["AgentCredentialPage"];
+type GeneratedCreateAgentCredentialInput =
+  Schemas["CreateAgentCredentialInput"];
+export type CreateAgentCredentialInput = Omit<
+  GeneratedCreateAgentCredentialInput,
+  "validityDays"
+> & {
+  /** Defaults to 30 days when omitted. */
+  validityDays?: GeneratedCreateAgentCredentialInput["validityDays"];
+};
+export type CreateAgentCredentialResult =
+  Schemas["CreateAgentCredentialResult"];
+export type RevokeAgentCredentialResult =
+  Schemas["RevokeAgentCredentialResult"];
 export type WebsiteInboxSpec = Schemas["WebsiteInboxSpec"];
 export type WebsiteChannel = Schemas["WebsiteChannel"];
 export type DaykeeperScope = Schemas["DaykeeperScope"];

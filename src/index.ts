@@ -2,6 +2,7 @@ export { DaykeeperClient } from "./client.js";
 export type {
   DaykeeperApplyOptions,
   DaykeeperClientOptions,
+  DaykeeperIdempotencyOptions,
   DaykeeperRequestOptions,
   DaykeeperTokenRequest,
   DaykeeperTokenProvider,
