@@ -1,0 +1,8 @@
+Daykeeper Node SDK
+Copyright 2026 SkyPorch
+
+Licensed under the Apache License, Version 2.0. See the LICENSE file.
+
+This distribution vendors an OpenAPI description under `openapi/`, copied from
+SkyPorch/daykeeper-openapi at the tag recorded in `openapi/SOURCE.md`. The
+generated TypeScript types in this package are derived from that description.
