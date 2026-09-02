@@ -4,6 +4,25 @@
 
 ## 0.2.0 (unreleased)
 
+- Require an explicit `idempotencyKey` on `flows.create`, `flows.createVersion`
+  and `flows.publishVersion`, send it as `Idempotency-Key`, and expose
+  `replayed` on the result. Add `generateIdempotencyKey()` for callers that want
+  one; the SDK never generates a key inside a retry.
+- Report a mutation that fails after dispatch as `outcomeUnknown: true` and
+  never retryable. Recover by repeating the same call with the same idempotency
+  key, which returns the stored result instead of applying the change twice.
+- Restrict the single authentication refresh after a `401` to reads and to
+  mutations that carry an idempotency key. A keyless mutation is never sent
+  twice. Read behavior is unchanged.
+- Call only the fixed contract path set, and reject a base URL that hides a
+  path level behind an encoded separator.
+- Project errors as contract fields only: `code`, `status`, `retryable`,
+  `outcomeUnknown`, `correlationId`, `message`, `nextActions` and `fields`. No
+  raw server body reaches the caller.
+- Keep a response that resolves exactly on the deadline instead of discarding it
+  as a timeout.
+- Classify a non-JSON rejection, such as a proxy `403` page, by its status
+  instead of reporting a retryable `INVALID_RESPONSE`.
 - Add typed agent credential list, reveal-once create, and revoke methods with
   explicit idempotency, cancellation, bounded metadata, and no automatic retry.
 - Accept a mutually exclusive `apiKey` constructor option for static server-side

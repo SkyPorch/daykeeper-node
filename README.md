@@ -61,6 +61,49 @@ Flow create/version/publish APIs are exposed, but the server currently reports
 audited, not executed against conversations, until the execution safety gate is
 delivered.
 
+### Flow mutations are idempotent
+
+`flows.create`, `flows.createVersion` and `flows.publishVersion` each require an
+`idempotencyKey`. Generate one per logical change and keep it for as long as you
+might repeat that change:
+
+```ts
+import { generateIdempotencyKey } from "@skyporch/daykeeper";
+
+const idempotencyKey = generateIdempotencyKey();
+const created = await daykeeper.flows.create(
+  tenantId,
+  { name: "Default handoff", slug: "default-handoff", definition },
+  { idempotencyKey },
+);
+
+console.log(created.replayed); // false the first time, true on a replay
+```
+
+The key must be 16 to 128 characters from `A-Z a-z 0-9 . _ : -`; the SDK
+rejects anything else before sending. Repeating the exact same request with the
+same key returns the original flow with `replayed: true` instead of creating a
+second one. Sending a different request with a key you already used is rejected
+with the server's `IDEMPOTENCY_KEY_REUSED` code, so pick a new key for a new
+change.
+
+### Recovering from an uncertain outcome
+
+If a mutation times out or its transport fails after the request left the SDK,
+the thrown `DaykeeperTransportError` carries `outcomeUnknown: true` and
+`retryable: false`. The server may or may not have applied the change, and the
+SDK deliberately does not decide for you.
+
+To recover, repeat the identical call with the **same** idempotency key. If the
+first attempt landed, you get the stored result with `replayed: true`; if it did
+not, the mutation is applied once. Never generate a fresh key to retry an
+uncertain mutation, and never call `generateIdempotencyKey()` inside a retry
+loop: that is how duplicates are created.
+
+For the same reason, the one automatic authentication refresh after a `401`
+applies to reads and to mutations that carry an idempotency key. A mutation
+without a key is never sent twice by the SDK.
+
 Trusted application servers can exchange their management credential for a
 five-minute customer-gateway token without exposing management or
 infrastructure-provider credentials to the app:
@@ -196,11 +239,19 @@ it is not present in npm 0.1.0 and this source change does not enable it.
 - `operations.get`, `operations.retry`
 - `flows.create`, `flows.list`, `flows.get`, `flows.getVersion`
 - `flows.createVersion`, `flows.publishVersion`
+- `generateIdempotencyKey()`
 
-`DaykeeperApiError` preserves the server's error code, retryability,
-`nextActions`, field names, and correlation ID. `DaykeeperTransportError`
-separates timeouts, aborts, network failures, invalid responses, and local
-configuration errors.
+There is no generic request escape hatch: the client calls only the fixed
+contract paths above, resolved under the configured `baseUrl`. A base URL that
+hides a second path level behind an encoded separator is rejected when the
+client is constructed.
+
+`DaykeeperApiError` preserves the server's error code, status, retryability,
+`nextActions`, field names, and correlation ID, and nothing else from the
+response body. `DaykeeperTransportError` separates timeouts, aborts, network
+failures, invalid responses, and local configuration errors. Both carry
+`outcomeUnknown`, which is true only when a mutation may already have been
+applied.
 
 ## Deadlines and cancellation
 
@@ -216,9 +267,11 @@ request. Cancellation returns `REQUEST_ABORTED`; deadline expiry returns
 pending after that deadline, and a late token cannot start a new request.
 
 Cancellation does not undo a request the server already accepted. A retryable
-transport error is not proof that a mutation is safe to repeat. Inspect the
-operation or reuse the original idempotency key where supported; the SDK does
-not automatically replay network failures or timeouts.
+transport error is not proof that a mutation is safe to repeat. When a mutation
+fails after dispatch the error reports `outcomeUnknown: true` and is never
+marked retryable; inspect the operation or repeat the call with the original
+idempotency key. The SDK does not automatically replay network failures or
+timeouts.
 
 Credential-provider failures use the non-retryable `TOKEN_PROVIDER_ERROR`
 code, distinct from network failures. Raw provider errors are not exposed.
