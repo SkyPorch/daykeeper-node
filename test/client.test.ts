@@ -472,9 +472,12 @@ test("uses stable encoded flow paths and version numbers", async () => {
   });
 
   await client.flows.getVersion("flow/one", 2);
-  await client.flows.publishVersion("flow/one", 2, {
-    expectedResourceVersion: 4,
-  });
+  await client.flows.publishVersion(
+    "flow/one",
+    2,
+    { expectedResourceVersion: 4 },
+    { idempotencyKey: "flow-publish-key-0001" },
+  );
 
   assert.deepEqual(urls, [
     "https://api.daykeeper.example/v1/flows/flow%2Fone/versions/2",

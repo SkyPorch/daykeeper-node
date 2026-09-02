@@ -23,6 +23,7 @@ import type {
   EmailChannelPlan,
   EmailChannelSpec,
   Flow,
+  FlowMutationResult,
   FlowVersion,
   FlowWithVersion,
   Operation,
@@ -35,6 +36,52 @@ import type {
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_RESPONSE_BYTES = 1024 * 1024;
+
+// The SDK calls a fixed contract surface. There is no caller-supplied path or
+// passthrough method, and every request is checked against this list before it
+// is resolved against the configured base URL.
+const SEGMENT = "[^/?#]+";
+const ALLOWED_PATHS: readonly RegExp[] = [
+  "/v1/capabilities",
+  "/v1/entitlements",
+  "/v1/usage",
+  "/v1/agent-credentials",
+  `/v1/agent-credentials/${SEGMENT}/revoke`,
+  "/v1/tenant-plans",
+  "/v1/tenants",
+  "/v1/tenants:apply",
+  `/v1/tenants/${SEGMENT}`,
+  `/v1/tenants/${SEGMENT}/website-channel`,
+  `/v1/tenants/${SEGMENT}/provisioning-operation`,
+  `/v1/tenants/${SEGMENT}/email-channel-plans`,
+  `/v1/tenants/${SEGMENT}/email-channel`,
+  `/v1/tenants/${SEGMENT}/customer-sessions`,
+  `/v1/tenants/${SEGMENT}/flows`,
+  "/v1/email-channels:apply",
+  `/v1/operations/${SEGMENT}`,
+  `/v1/operations/${SEGMENT}/retry`,
+  "/v1/flows",
+  `/v1/flows/${SEGMENT}`,
+  `/v1/flows/${SEGMENT}/versions`,
+  `/v1/flows/${SEGMENT}/versions/[0-9]+`,
+  `/v1/flows/${SEGMENT}/versions/[0-9]+/publish`,
+].map((pattern) => new RegExp(`^${pattern}$`));
+
+const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9._:-]{16,128}$/;
+
+/**
+ * Create a key for one logical mutation. Reuse the returned value when you
+ * repeat a call whose outcome you do not know; never call this inside a retry.
+ */
+export function generateIdempotencyKey(): string {
+  const random = globalThis.crypto;
+  if (typeof random?.randomUUID !== "function") {
+    throw configurationError(
+      "A Web Crypto implementation with randomUUID is required",
+    );
+  }
+  return validateIdempotencyKey(random.randomUUID());
+}
 
 export interface DaykeeperTokenRequest {
   forceRefresh: boolean;
@@ -140,19 +187,22 @@ export class DaykeeperClient {
     create: (
       tenantId: string,
       input: CreateFlowInput,
-    ) => Promise<FlowWithVersion>;
+      options: DaykeeperIdempotencyOptions,
+    ) => Promise<FlowMutationResult>;
     list: (tenantId?: string) => Promise<readonly Flow[]>;
     get: (flowId: string) => Promise<FlowWithVersion>;
     getVersion: (flowId: string, version: number) => Promise<FlowVersion>;
     createVersion: (
       flowId: string,
       input: CreateFlowVersionInput,
-    ) => Promise<FlowWithVersion>;
+      options: DaykeeperIdempotencyOptions,
+    ) => Promise<FlowMutationResult>;
     publishVersion: (
       flowId: string,
       version: number,
       input: PublishFlowVersionInput,
-    ) => Promise<FlowWithVersion>;
+      options: DaykeeperIdempotencyOptions,
+    ) => Promise<FlowMutationResult>;
   };
 
   readonly #baseUrl: URL;
@@ -276,31 +326,41 @@ export class DaykeeperClient {
         }),
     };
     this.flows = {
-      create: (tenantId, input) =>
+      create: (tenantId, input, requestOptions) =>
         this.#request(`/v1/tenants/${pathSegment(tenantId)}/flows`, {
           method: "POST",
           body: input,
+          idempotencyKey: requestOptions?.idempotencyKey,
+          requireIdempotencyKey: true,
+          signal: requestOptions?.signal,
         }),
       list: (tenantId) =>
-        this.#request(
-          tenantId
-            ? `/v1/flows?tenantId=${encodeURIComponent(tenantId)}`
-            : "/v1/flows",
-        ),
+        this.#request("/v1/flows", {
+          query: tenantId === undefined ? undefined : { tenantId },
+        }),
       get: (flowId) => this.#request(`/v1/flows/${pathSegment(flowId)}`),
       getVersion: (flowId, version) =>
         this.#request(
           `/v1/flows/${pathSegment(flowId)}/versions/${positiveInteger(version)}`,
         ),
-      createVersion: (flowId, input) =>
+      createVersion: (flowId, input, requestOptions) =>
         this.#request(`/v1/flows/${pathSegment(flowId)}/versions`, {
           method: "POST",
           body: input,
+          idempotencyKey: requestOptions?.idempotencyKey,
+          requireIdempotencyKey: true,
+          signal: requestOptions?.signal,
         }),
-      publishVersion: (flowId, version, input) =>
+      publishVersion: (flowId, version, input, requestOptions) =>
         this.#request(
           `/v1/flows/${pathSegment(flowId)}/versions/${positiveInteger(version)}/publish`,
-          { method: "POST", body: input },
+          {
+            method: "POST",
+            body: input,
+            idempotencyKey: requestOptions?.idempotencyKey,
+            requireIdempotencyKey: true,
+            signal: requestOptions.signal,
+          },
         ),
     };
   }
@@ -311,11 +371,24 @@ export class DaykeeperClient {
       method?: "GET" | "POST";
       body?: unknown;
       idempotencyKey?: string;
+      requireIdempotencyKey?: boolean;
+      query?: Readonly<Record<string, string>>;
       signal?: AbortSignal;
     } = {},
   ): Promise<T> {
+    const method = options.method ?? "GET";
+    if (options.requireIdempotencyKey && options.idempotencyKey === undefined) {
+      throw configurationError(
+        "This mutation requires an idempotencyKey; create one with generateIdempotencyKey() and reuse it to recover",
+      );
+    }
+    const url = this.#resolveUrl(path, options.query);
     const lifetime = createRequestLifetime(this.#timeoutMs, options.signal);
     let response: Response | undefined;
+    // True once a request has left the SDK. From that moment a mutation may
+    // already have been applied, so a later failure has an unknown outcome.
+    let dispatched = false;
+    const mutates = method !== "GET";
 
     try {
       try {
@@ -339,46 +412,64 @@ export class DaykeeperClient {
               validateIdempotencyKey(options.idempotencyKey),
             );
           }
-          return lifetime.run(
-            () =>
-              this.#fetch(new URL(path.replace(/^\/+/, ""), this.#baseUrl), {
-                body:
-                  options.body === undefined
-                    ? undefined
-                    : JSON.stringify(options.body),
-                headers,
-                method: options.method ?? "GET",
-                signal: lifetime.signal,
-              }),
-            discardResponse,
-          );
+          return lifetime.run(() => {
+            dispatched = true;
+            return this.#fetch(url, {
+              body:
+                options.body === undefined
+                  ? undefined
+                  : JSON.stringify(options.body),
+              headers,
+              method,
+              signal: lifetime.signal,
+            });
+          }, discardResponse);
         };
         response = await send(false);
-        if (response.status === 401 && typeof this.#token === "function") {
+        // Replaying a write can duplicate it. Only a read, or a write the
+        // server can recognize as a replay, may be sent a second time.
+        const mayReplay = !mutates || options.idempotencyKey !== undefined;
+        if (
+          response.status === 401 &&
+          typeof this.#token === "function" &&
+          mayReplay
+        ) {
           discardResponse(response);
           response = await send(true);
         }
       } catch (error) {
-        if (error instanceof DaykeeperTransportError) throw error;
-        throw new DaykeeperTransportError({
+        throw this.#failure(error, {
           code: "NETWORK_ERROR",
           message: "The Daykeeper API could not be reached",
-          retryable: true,
+          outcomeUnknown: mutates && dispatched,
         });
       }
 
       let payload: unknown;
+      let payloadFailure: DaykeeperTransportError | undefined;
       try {
         payload = await readJson(response, lifetime);
       } catch (error) {
-        if (error instanceof DaykeeperTransportError) throw error;
-        throw new DaykeeperTransportError({
+        payloadFailure = this.#failure(error, {
           code: "NETWORK_ERROR",
           message: "The Daykeeper response could not be read",
-          retryable: true,
+          outcomeUnknown: mutates,
         });
+        // A cancelled or expired read says nothing about the response status.
+        if (
+          payloadFailure.code === "REQUEST_TIMEOUT" ||
+          payloadFailure.code === "REQUEST_ABORTED"
+        ) {
+          throw payloadFailure;
+        }
       }
-      if (!response.ok) throw apiError(response, payload);
+      // Check the status before the body. A proxy or load balancer can reject a
+      // request with a non-JSON page, which is a status error, not a contract
+      // violation by the Daykeeper API.
+      if (!response.ok) {
+        throw apiError(response, payloadFailure ? undefined : payload);
+      }
+      if (payloadFailure) throw payloadFailure;
       if (!isRecord(payload) || !("data" in payload)) {
         throw new DaykeeperTransportError({
           code: "INVALID_RESPONSE",
@@ -391,6 +482,50 @@ export class DaykeeperClient {
       if (response) discardResponse(response);
       lifetime.dispose();
     }
+  }
+
+  /**
+   * Project any thrown value as a transport error. A dispatched mutation keeps
+   * its original code but is reported as an unknown outcome and never as
+   * automatically retryable.
+   */
+  #failure(
+    error: unknown,
+    fallback: {
+      code: "NETWORK_ERROR";
+      message: string;
+      outcomeUnknown: boolean;
+    },
+  ): DaykeeperTransportError {
+    if (error instanceof DaykeeperTransportError) {
+      if (!fallback.outcomeUnknown || error.outcomeUnknown) return error;
+      return new DaykeeperTransportError({
+        code: error.code,
+        message: error.message,
+        outcomeUnknown: true,
+      });
+    }
+    return new DaykeeperTransportError({
+      code: fallback.code,
+      message: fallback.message,
+      retryable: !fallback.outcomeUnknown,
+      outcomeUnknown: fallback.outcomeUnknown,
+    });
+  }
+
+  #resolveUrl(path: string, query?: Readonly<Record<string, string>>): URL {
+    if (!ALLOWED_PATHS.some((allowed) => allowed.test(path))) {
+      throw configurationError("The requested Daykeeper endpoint is not known");
+    }
+    const url = new URL(path.replace(/^\/+/, ""), this.#baseUrl);
+    for (const [name, value] of Object.entries(query ?? {})) {
+      url.searchParams.set(name, value);
+    }
+    // Defence in depth: resolution must never escape the configured base.
+    if (!url.href.startsWith(this.#baseUrl.href)) {
+      throw configurationError("The requested Daykeeper endpoint is not known");
+    }
+    return url;
   }
 }
 
@@ -429,6 +564,12 @@ function parseBaseUrl(value: string): URL {
       "baseUrl cannot contain credentials, a query, or a fragment",
     );
   }
+  // A fixed reverse-proxy prefix is allowed. URL parsing already resolves dot
+  // segments, but an encoded separator survives it and could hide a second
+  // path level from the base, so reject it here.
+  if (/%2f|%5c/i.test(url.pathname)) {
+    throw configurationError("baseUrl cannot contain encoded path separators");
+  }
   url.pathname = `${url.pathname.replace(/\/+$/, "")}/`;
   return url;
 }
@@ -445,6 +586,9 @@ function validateTimeout(value: number): number {
 function pathSegment(value: string): string {
   if (!value.trim())
     throw configurationError("Resource identifiers cannot be empty");
+  if (value === "." || value === "..") {
+    throw configurationError("Resource identifiers cannot traverse the path");
+  }
   return encodeURIComponent(value);
 }
 
@@ -472,11 +616,7 @@ function validateHeaderValue(
 }
 
 function validateIdempotencyKey(value: string): string {
-  if (
-    value.length >= 16 &&
-    value.length <= 128 &&
-    /^[A-Za-z0-9._:-]+$/.test(value)
-  ) {
+  if (typeof value === "string" && IDEMPOTENCY_KEY_PATTERN.test(value)) {
     return value;
   }
   throw configurationError(

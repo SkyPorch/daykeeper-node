@@ -1,4 +1,4 @@
-export { DaykeeperClient } from "./client.js";
+export { DaykeeperClient, generateIdempotencyKey } from "./client.js";
 export type {
   DaykeeperApplyOptions,
   DaykeeperClientOptions,

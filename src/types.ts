@@ -61,6 +61,9 @@ export type FlowState = Schemas["Flow"]["state"];
 export type Flow = Schemas["Flow"];
 export type FlowVersion = Schemas["FlowVersion"];
 export type FlowWithVersion = Schemas["FlowWithVersion"];
+/** A flow mutation result. `replayed` is true when the server returned the
+ * stored result of an earlier identical request instead of applying a new one. */
+export type FlowMutationResult = Schemas["FlowMutationResult"];
 export type CreateFlowInput = Schemas["CreateFlowInput"];
 export type CreateFlowVersionInput = Schemas["CreateFlowVersionInput"];
 export type PublishFlowVersionInput = Schemas["PublishFlowVersionInput"];

@@ -115,7 +115,7 @@ test("a transport that ignores abort cannot outlive the deadline", async (t) => 
       return transport.promise;
     },
   });
-  const rejected = rejectsCode(request(), "REQUEST_TIMEOUT");
+  const rejected = rejectsCode(request(), "REQUEST_TIMEOUT", true);
   await started.promise;
   t.mock.timers.tick(1000);
   await rejected;
@@ -143,7 +143,7 @@ test("late transport rejection remains handled after caller cancellation", async
       return transport.promise;
     },
   });
-  const rejected = rejectsCode(request(caller.signal), "REQUEST_ABORTED");
+  const rejected = rejectsCode(request(caller.signal), "REQUEST_ABORTED", true);
   await started.promise;
   caller.abort();
   await rejected;
@@ -167,7 +167,7 @@ test("a stalled body is cancelled without waiting for its cleanup promise", asyn
     timeoutMs: 1000,
     fetch: async () => new Response(body),
   });
-  const rejected = rejectsCode(request(), "REQUEST_TIMEOUT");
+  const rejected = rejectsCode(request(), "REQUEST_TIMEOUT", true);
   await nextTurn();
   assert.equal(body.locked, true);
   t.mock.timers.tick(1000);
@@ -196,7 +196,7 @@ test("throwing stream cleanup cannot replace timeout or cancellation", async (t)
       timeoutMs: 1000,
       fetch: async () => response,
     });
-    const rejected = rejectsCode(request(caller.signal), code);
+    const rejected = rejectsCode(request(caller.signal), code, true);
     await nextTurn();
     if (code === "REQUEST_TIMEOUT") t.mock.timers.tick(1000);
     else caller.abort();
@@ -216,7 +216,7 @@ test("caller abort during body reading remains REQUEST_ABORTED", async () => {
     },
   });
   const request = makeRequest({ fetch: async () => new Response(body) });
-  const rejected = rejectsCode(request(caller.signal), "REQUEST_ABORTED");
+  const rejected = rejectsCode(request(caller.signal), "REQUEST_ABORTED", true);
   await nextTurn();
   caller.abort(new Error("private reason"));
   await rejected;
@@ -234,6 +234,7 @@ test("authentication refresh shares the original deadline and abort signal", asy
   let fetchCalls = 0;
   const request = makeRequest({
     timeoutMs: 1000,
+    idempotencyKey: "auth-refresh-deadline-0001",
     token: (context) => {
       signals.push(context?.signal);
       refresh.push(context?.forceRefresh ?? false);
@@ -249,7 +250,7 @@ test("authentication refresh shares the original deadline and abort signal", asy
       return response.promise;
     },
   });
-  const rejected = rejectsCode(request(), "REQUEST_TIMEOUT");
+  const rejected = rejectsCode(request(), "REQUEST_TIMEOUT", true);
   await fetchStarted.promise;
   t.mock.timers.tick(600);
   response.resolve(new Response("not JSON", { status: 401 }));
@@ -267,6 +268,7 @@ test("a 401 body cannot block the one permitted authentication refresh", async (
   let fetchCalls = 0;
   const refresh: boolean[] = [];
   const request = makeRequest({
+    idempotencyKey: "auth-refresh-body-0001",
     token: (context) => {
       refresh.push(context?.forceRefresh ?? false);
       return "token";
@@ -313,7 +315,7 @@ test("oversized bodies fail without waiting for cancellation", async () => {
             : {},
         }),
     });
-    await rejectsCode(request(), "RESPONSE_TOO_LARGE");
+    await rejectsCode(request(), "RESPONSE_TOO_LARGE", true);
     assert.equal(discarded, true);
     assert.equal(body.locked, false);
   }
@@ -371,6 +373,7 @@ test("caller cancellation during refresh cannot dispatch again", async () => {
   const refreshing = deferred<void>();
   let fetchCalls = 0;
   const request = makeRequest({
+    idempotencyKey: "auth-refresh-cancel-0001",
     token: (context) => {
       if (context?.forceRefresh) {
         refreshing.resolve();
@@ -383,7 +386,7 @@ test("caller cancellation during refresh cannot dispatch again", async () => {
       return new Response(null, { status: 401 });
     },
   });
-  const rejected = rejectsCode(request(caller.signal), "REQUEST_ABORTED");
+  const rejected = rejectsCode(request(caller.signal), "REQUEST_ABORTED", true);
   await refreshing.promise;
   caller.abort();
   await rejected;
@@ -406,7 +409,7 @@ test("late authentication rejection is discarded without refreshing", async () =
       return transport.promise;
     },
   });
-  const rejected = rejectsCode(request(caller.signal), "REQUEST_ABORTED");
+  const rejected = rejectsCode(request(caller.signal), "REQUEST_ABORTED", true);
   await started.promise;
   caller.abort();
   await rejected;
@@ -433,7 +436,7 @@ test("an errored response stream releases its reader and hides raw errors", asyn
     },
   });
   const request = makeRequest({ fetch: async () => new Response(body) });
-  const rejected = rejectsCode(request(), "NETWORK_ERROR");
+  const rejected = rejectsCode(request(), "NETWORK_ERROR", true);
   await nextTurn();
   streamController.error(new Error("private network failure"));
   await rejected;
@@ -448,7 +451,7 @@ test("network failure is not automatically replayed", async () => {
       throw new Error("private request details");
     },
   });
-  await rejectsCode(request(), "NETWORK_ERROR");
+  await rejectsCode(request(), "NETWORK_ERROR", true);
   assert.equal(fetchCalls, 1);
 });
 
@@ -490,7 +493,7 @@ test("concurrent requests have independent cancellation", async () => {
       return success();
     },
   });
-  const rejected = rejectsCode(request(caller.signal), "REQUEST_ABORTED");
+  const rejected = rejectsCode(request(caller.signal), "REQUEST_ABORTED", true);
   await waiting.promise;
   await request();
   caller.abort();
@@ -521,7 +524,7 @@ test(
       timeoutMs: 1000,
       fetch,
     });
-    await rejectsCode(request(), "REQUEST_TIMEOUT");
+    await rejectsCode(request(), "REQUEST_TIMEOUT", true);
     assert.equal(requests, 1);
   },
 );
@@ -536,13 +539,19 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function rejectsCode(request: Promise<unknown>, code: string) {
+function rejectsCode(
+  request: Promise<unknown>,
+  code: string,
+  outcomeUnknown = false,
+) {
   return assert.rejects(request, (error: unknown) => {
     assert(error instanceof TransportError);
     assert.equal(error.code, code);
+    assert.equal(error.outcomeUnknown, outcomeUnknown);
     assert.equal(
       error.retryable,
-      code === "REQUEST_TIMEOUT" || code === "NETWORK_ERROR",
+      !outcomeUnknown &&
+        (code === "REQUEST_TIMEOUT" || code === "NETWORK_ERROR"),
     );
     assert(!JSON.stringify(error).includes("private"));
     return true;
@@ -566,6 +575,8 @@ function makeRequest(
     token?: (context?: TokenContext) => string | Promise<string>;
     fetch?: typeof fetch;
     timeoutMs?: number;
+    /** Send a mutation the server can recognize as a replay. */
+    idempotencyKey?: string;
   } = {},
 ) {
   const client = new DaykeeperClient({
@@ -574,10 +585,16 @@ function makeRequest(
     fetch: options.fetch ?? (async () => success()),
     timeoutMs: options.timeoutMs,
   });
+  const idempotencyKey = options.idempotencyKey;
   return (signal?: AbortSignal) =>
-    client.customerSessions.create(
-      "tenant-example",
-      { purpose: "customer", subject: "customer-example" },
-      { signal },
-    );
+    idempotencyKey === undefined
+      ? client.customerSessions.create(
+          "tenant-example",
+          { purpose: "customer", subject: "customer-example" },
+          { signal },
+        )
+      : client.tenants.apply(
+          { planId: "plan-example", planVersion: 1 },
+          { idempotencyKey, signal },
+        );
 }
