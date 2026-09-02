@@ -426,7 +426,13 @@ export interface paths {
         /** List a tenant's flows */
         get: operations["listTenantFlows"];
         put?: never;
-        /** Create a flow and its first immutable version */
+        /**
+         * Create a flow and its first immutable version
+         * @description Requires an Idempotency-Key header. Replaying the exact same request
+         *     returns the original flow with replayed true instead of creating a
+         *     second flow. Reusing the key for a different request is rejected with
+         *     IDEMPOTENCY_KEY_REUSED.
+         */
         post: operations["createFlow"];
         delete?: never;
         options?: never;
@@ -481,7 +487,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Create the next immutable flow version */
+        /**
+         * Create the next immutable flow version
+         * @description Requires an Idempotency-Key header. Replaying the exact same request
+         *     returns the original version with replayed true instead of creating a
+         *     second version. Reusing the key for a different request is rejected
+         *     with IDEMPOTENCY_KEY_REUSED.
+         */
         post: operations["createFlowVersion"];
         delete?: never;
         options?: never;
@@ -526,6 +538,10 @@ export interface paths {
          * @description Publishing records audited desired state. The current capability reports
          *     flow execution as management_only; this operation does not yet execute a
          *     flow against customer conversations.
+         *
+         *     Requires an Idempotency-Key header. Replaying the exact same request
+         *     returns the original result with replayed true. Reusing the key for a
+         *     different request is rejected with IDEMPOTENCY_KEY_REUSED.
          */
         post: operations["publishFlowVersion"];
         delete?: never;
@@ -576,6 +592,8 @@ export interface components {
                 /** @constant */
                 execution: "management_only";
             };
+        } & {
+            [key: string]: unknown;
         };
         /**
          * @description Immutable, versioned internal admission policy. The current
@@ -727,6 +745,8 @@ export interface components {
                 /** Format: email */
                 email: string;
             };
+        } & {
+            [key: string]: unknown;
         };
         /**
          * @description Exact HTTPS root URLs only; the scheme must be lowercase https. No
@@ -1044,6 +1064,14 @@ export interface components {
             flow: components["schemas"]["Flow"];
             version: components["schemas"]["FlowVersion"];
         };
+        FlowMutationResult: {
+            flow: components["schemas"]["Flow"];
+            version: components["schemas"]["FlowVersion"];
+            /** @description True when the stored result of an earlier identical request was returned. */
+            replayed: boolean;
+        } & {
+            [key: string]: unknown;
+        };
         CreateFlowInput: {
             name: string;
             slug: string;
@@ -1116,6 +1144,8 @@ export interface components {
             nextActions: string[];
             correlationId: string;
             fields?: string[];
+        } & {
+            [key: string]: unknown;
         };
         ErrorResponse: {
             error: components["schemas"]["ErrorDetail"];
@@ -1173,6 +1203,9 @@ export interface components {
         };
         FlowWithVersionResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["FlowWithVersion"];
+        };
+        FlowMutationResultResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["FlowMutationResult"];
         };
         FlowVersionResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["FlowVersion"];
@@ -1791,7 +1824,10 @@ export interface operations {
     createFlow: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description A caller-generated key reused only for an exact logical mutation. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 tenantId: components["parameters"]["TenantId"];
             };
@@ -1803,13 +1839,22 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Draft flow and immutable version one. */
+            /** @description The exact original request was replayed; replayed is true. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FlowMutationResultResponse"];
+                };
+            };
+            /** @description Draft flow and immutable version one; replayed is false. */
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["FlowWithVersionResponse"];
+                    "application/json": components["schemas"]["FlowMutationResultResponse"];
                 };
             };
             401: components["responses"]["Error"];
@@ -1867,7 +1912,10 @@ export interface operations {
     createFlowVersion: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description A caller-generated key reused only for an exact logical mutation. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 flowId: components["parameters"]["FlowId"];
             };
@@ -1879,13 +1927,22 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Flow and newly created version. */
+            /** @description The exact original request was replayed; replayed is true. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FlowMutationResultResponse"];
+                };
+            };
+            /** @description Flow and newly created version; replayed is false. */
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["FlowWithVersionResponse"];
+                    "application/json": components["schemas"]["FlowMutationResultResponse"];
                 };
             };
             401: components["responses"]["Error"];
@@ -1920,7 +1977,10 @@ export interface operations {
     publishFlowVersion: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description A caller-generated key reused only for an exact logical mutation. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 flowId: components["parameters"]["FlowId"];
                 version: components["parameters"]["FlowVersionNumber"];
@@ -1933,13 +1993,16 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Flow with the selected published version. */
+            /**
+             * @description Flow with the selected published version. replayed is true when the
+             *     same key already published this exact request.
+             */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["FlowWithVersionResponse"];
+                    "application/json": components["schemas"]["FlowMutationResultResponse"];
                 };
             };
             401: components["responses"]["Error"];
