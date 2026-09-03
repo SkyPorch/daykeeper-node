@@ -428,10 +428,21 @@ export interface paths {
         put?: never;
         /**
          * Create a flow and its first immutable version
-         * @description Requires an Idempotency-Key header. Replaying the exact same request
-         *     returns the original flow with replayed true instead of creating a
-         *     second flow. Reusing the key for a different request is rejected with
-         *     IDEMPOTENCY_KEY_REUSED.
+         * @description Requires an Idempotency-Key header. The first application creates the
+         *     draft flow and its first immutable version and answers 201 with
+         *     `replayed: false`. Sending the same key with the exact same body again
+         *     answers 200 with the original flow and version and `replayed: true`; no
+         *     second flow is created, even after the flow has since changed.
+         *
+         *     Sending the same key with a different body is rejected with
+         *     IDEMPOTENCY_KEY_REUSED (409) and no write is applied. A slug already in
+         *     use by another flow is still rejected with RESOURCE_CONFLICT (409).
+         *
+         *     When a request fails without a usable response its outcome is unknown.
+         *     Repeat it with the same key and the exact original body to learn what
+         *     happened; do not retry an uncertain mutation under a new key. The Node
+         *     SDK surfaces this state as `outcomeUnknown` on the raised error and will
+         *     not retry it automatically.
          */
         post: operations["createFlow"];
         delete?: never;
@@ -489,10 +500,21 @@ export interface paths {
         put?: never;
         /**
          * Create the next immutable flow version
-         * @description Requires an Idempotency-Key header. Replaying the exact same request
-         *     returns the original version with replayed true instead of creating a
-         *     second version. Reusing the key for a different request is rejected
-         *     with IDEMPOTENCY_KEY_REUSED.
+         * @description Requires an Idempotency-Key header. The first application creates the
+         *     next immutable version and answers 201 with `replayed: false`. Sending
+         *     the same key with the exact same body again answers 200 with the
+         *     original version and `replayed: true`; no second version is created.
+         *
+         *     Sending the same key with a different body is rejected with
+         *     IDEMPOTENCY_KEY_REUSED (409) and no write is applied. Optimistic
+         *     concurrency still applies to every new key: a stale
+         *     `expectedLatestVersion` is rejected with RESOURCE_VERSION_CONFLICT (409).
+         *
+         *     When a request fails without a usable response its outcome is unknown.
+         *     Repeat it with the same key and the exact original body to learn what
+         *     happened; do not retry an uncertain mutation under a new key. The Node
+         *     SDK surfaces this state as `outcomeUnknown` on the raised error and will
+         *     not retry it automatically.
          */
         post: operations["createFlowVersion"];
         delete?: never;
@@ -539,9 +561,22 @@ export interface paths {
          *     flow execution as management_only; this operation does not yet execute a
          *     flow against customer conversations.
          *
-         *     Requires an Idempotency-Key header. Replaying the exact same request
-         *     returns the original result with replayed true. Reusing the key for a
-         *     different request is rejected with IDEMPOTENCY_KEY_REUSED.
+         *     Requires an Idempotency-Key header. This operation always answers 200:
+         *     the first application publishes the version and reports
+         *     `replayed: false`, and the same key with the exact same body answers
+         *     with the original result and `replayed: true` without publishing again.
+         *
+         *     Sending the same key with a different body is rejected with
+         *     IDEMPOTENCY_KEY_REUSED (409) and no write is applied. Optimistic
+         *     concurrency still applies to every new key: a stale
+         *     `expectedResourceVersion` is rejected with RESOURCE_VERSION_CONFLICT
+         *     (409).
+         *
+         *     When a request fails without a usable response its outcome is unknown.
+         *     Repeat it with the same key and the exact original body to learn what
+         *     happened; do not retry an uncertain mutation under a new key. The Node
+         *     SDK surfaces this state as `outcomeUnknown` on the raised error and will
+         *     not retry it automatically.
          */
         post: operations["publishFlowVersion"];
         delete?: never;
@@ -1067,7 +1102,10 @@ export interface components {
         FlowMutationResult: {
             flow: components["schemas"]["Flow"];
             version: components["schemas"]["FlowVersion"];
-            /** @description True when the stored result of an earlier identical request was returned. */
+            /**
+             * @description True when the stored result of an earlier identical request under
+             *     the same idempotency key was returned and no write was applied.
+             */
             replayed: boolean;
         } & {
             [key: string]: unknown;
@@ -1215,6 +1253,21 @@ export interface components {
         };
     };
     responses: {
+        /**
+         * @description The idempotency key is already bound to a different request, or the
+         *     mutation conflicts with current state. IDEMPOTENCY_KEY_REUSED is never
+         *     retryable under the same key and no write was applied; resend the exact
+         *     original request under that key, or start a new mutation under a new
+         *     key. Existing flow conflict codes still apply.
+         */
+        IdempotencyKeyReused: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
         /** @description Structured Daykeeper error. Resource denials do not disclose cross-tenant existence. */
         Error: {
             headers: {
@@ -1230,7 +1283,16 @@ export interface components {
         };
     };
     parameters: {
-        /** @description A caller-generated key reused only for an exact logical mutation. */
+        /**
+         * @description A caller-generated key reused only for an exact logical mutation. The
+         *     key is bound to the request the first time it is applied. Repeating that
+         *     exact request with the same key returns the stored original result
+         *     instead of writing again, and the operation reports the repeat as a
+         *     replay. Reusing the key for a different request is rejected and no write
+         *     is applied. A missing or malformed key is rejected with INVALID_INPUT
+         *     (400). Use the same key to reconcile a request whose outcome is unknown;
+         *     do not retry an uncertain mutation under a new key.
+         */
         IdempotencyKey: string;
         TenantId: string;
         OperationId: string;
@@ -1357,7 +1419,16 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description A caller-generated key reused only for an exact logical mutation. */
+                /**
+                 * @description A caller-generated key reused only for an exact logical mutation. The
+                 *     key is bound to the request the first time it is applied. Repeating that
+                 *     exact request with the same key returns the stored original result
+                 *     instead of writing again, and the operation reports the repeat as a
+                 *     replay. Reusing the key for a different request is rejected and no write
+                 *     is applied. A missing or malformed key is rejected with INVALID_INPUT
+                 *     (400). Use the same key to reconcile a request whose outcome is unknown;
+                 *     do not retry an uncertain mutation under a new key.
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -1469,7 +1540,16 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description A caller-generated key reused only for an exact logical mutation. */
+                /**
+                 * @description A caller-generated key reused only for an exact logical mutation. The
+                 *     key is bound to the request the first time it is applied. Repeating that
+                 *     exact request with the same key returns the stored original result
+                 *     instead of writing again, and the operation reports the repeat as a
+                 *     replay. Reusing the key for a different request is rejected and no write
+                 *     is applied. A missing or malformed key is rejected with INVALID_INPUT
+                 *     (400). Use the same key to reconcile a request whose outcome is unknown;
+                 *     do not retry an uncertain mutation under a new key.
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -1636,7 +1716,16 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description A caller-generated key reused only for an exact logical mutation. */
+                /**
+                 * @description A caller-generated key reused only for an exact logical mutation. The
+                 *     key is bound to the request the first time it is applied. Repeating that
+                 *     exact request with the same key returns the stored original result
+                 *     instead of writing again, and the operation reports the repeat as a
+                 *     replay. Reusing the key for a different request is rejected and no write
+                 *     is applied. A missing or malformed key is rejected with INVALID_INPUT
+                 *     (400). Use the same key to reconcile a request whose outcome is unknown;
+                 *     do not retry an uncertain mutation under a new key.
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -1825,7 +1914,16 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description A caller-generated key reused only for an exact logical mutation. */
+                /**
+                 * @description A caller-generated key reused only for an exact logical mutation. The
+                 *     key is bound to the request the first time it is applied. Repeating that
+                 *     exact request with the same key returns the stored original result
+                 *     instead of writing again, and the operation reports the repeat as a
+                 *     replay. Reusing the key for a different request is rejected and no write
+                 *     is applied. A missing or malformed key is rejected with INVALID_INPUT
+                 *     (400). Use the same key to reconcile a request whose outcome is unknown;
+                 *     do not retry an uncertain mutation under a new key.
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -1857,7 +1955,10 @@ export interface operations {
                     "application/json": components["schemas"]["FlowMutationResultResponse"];
                 };
             };
+            /** @description The Idempotency-Key header is missing or malformed (INVALID_INPUT). */
+            400: components["responses"]["Error"];
             401: components["responses"]["Error"];
+            409: components["responses"]["IdempotencyKeyReused"];
             default: components["responses"]["Error"];
         };
     };
@@ -1913,7 +2014,16 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description A caller-generated key reused only for an exact logical mutation. */
+                /**
+                 * @description A caller-generated key reused only for an exact logical mutation. The
+                 *     key is bound to the request the first time it is applied. Repeating that
+                 *     exact request with the same key returns the stored original result
+                 *     instead of writing again, and the operation reports the repeat as a
+                 *     replay. Reusing the key for a different request is rejected and no write
+                 *     is applied. A missing or malformed key is rejected with INVALID_INPUT
+                 *     (400). Use the same key to reconcile a request whose outcome is unknown;
+                 *     do not retry an uncertain mutation under a new key.
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -1945,7 +2055,10 @@ export interface operations {
                     "application/json": components["schemas"]["FlowMutationResultResponse"];
                 };
             };
+            /** @description The Idempotency-Key header is missing or malformed (INVALID_INPUT). */
+            400: components["responses"]["Error"];
             401: components["responses"]["Error"];
+            409: components["responses"]["IdempotencyKeyReused"];
             default: components["responses"]["Error"];
         };
     };
@@ -1978,7 +2091,16 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description A caller-generated key reused only for an exact logical mutation. */
+                /**
+                 * @description A caller-generated key reused only for an exact logical mutation. The
+                 *     key is bound to the request the first time it is applied. Repeating that
+                 *     exact request with the same key returns the stored original result
+                 *     instead of writing again, and the operation reports the repeat as a
+                 *     replay. Reusing the key for a different request is rejected and no write
+                 *     is applied. A missing or malformed key is rejected with INVALID_INPUT
+                 *     (400). Use the same key to reconcile a request whose outcome is unknown;
+                 *     do not retry an uncertain mutation under a new key.
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -1995,7 +2117,8 @@ export interface operations {
         responses: {
             /**
              * @description Flow with the selected published version. replayed is true when the
-             *     same key already published this exact request.
+             *     same key already published this exact request, and false when this
+             *     request performed the publication.
              */
             200: {
                 headers: {
@@ -2005,7 +2128,10 @@ export interface operations {
                     "application/json": components["schemas"]["FlowMutationResultResponse"];
                 };
             };
+            /** @description The Idempotency-Key header is missing or malformed (INVALID_INPUT). */
+            400: components["responses"]["Error"];
             401: components["responses"]["Error"];
+            409: components["responses"]["IdempotencyKeyReused"];
             default: components["responses"]["Error"];
         };
     };
