@@ -20,7 +20,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --dts --sourcemap --clean",
+    "build": "tsup src/index.ts --format esm,cjs --dts --sourcemap --clean && node scripts/normalize-sourcemaps.mjs",
     "check": "pnpm format:check && pnpm check:generated && pnpm typecheck && pnpm test && pnpm build && pnpm pack:check && pnpm test:package",
     "check:generated": "pnpm generate && git diff --exit-code -- src/generated/schema.ts",
     "format": "prettier --write .",

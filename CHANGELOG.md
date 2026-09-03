@@ -1,8 +1,26 @@
 # Changelog
 
-## Unreleased
-
 ## 0.2.0 (unreleased)
+
+### Breaking
+
+- The vendored management contract moves to 0.2.0 and breaks callers in two
+  ways. `flows.create`, `flows.createVersion` and `flows.publishVersion` now
+  REQUIRE an `Idempotency-Key` header, so their `options` argument and its
+  `idempotencyKey` are mandatory; a call without one is rejected as
+  `INVALID_CONFIGURATION` and never reaches the server. Use
+  `generateIdempotencyKey()` to mint one per logical mutation, and reuse the
+  same key when you repeat a call.
+- A replayed flow mutation now returns `200` alongside the existing `201`.
+  Both are success. The result carries `replayed: true` when the stored result
+  of an earlier identical request under the same key was returned and no write
+  was applied, so code that treated `201` as "created" must read `replayed`
+  instead of the status.
+- This break comes from the management contract only. The customer contract
+  (`openapi/customer.yaml`) stays at 0.1.0 and has no `Idempotency-Key`
+  requirement, so customer-contract SDKs are unaffected by it.
+
+### Changes
 
 - Require an explicit `idempotencyKey` on `flows.create`, `flows.createVersion`
   and `flows.publishVersion`, send it as `Idempotency-Key`, and expose
@@ -46,6 +64,9 @@
 - Accept optional website settings on the existing tenant plan and inspect
   preparation with `websiteChannels.get(tenantId)`. Prepared is not activated;
   no routing, credentials, billing or customer traffic is enabled by the SDK.
+- Rewrite published source map `sources` so they stay inside `dist` instead of
+  pointing at an unpublished `../src`. The original text was already embedded in
+  `sourcesContent`, so debugger behavior improves and nothing is lost.
 - Record the exact unreleased canonical contract snapshot. Existing account-only
   and customer-session methods retain their paths and behavior.
 

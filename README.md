@@ -6,6 +6,8 @@ autonomous agents: every mutation has a typed input, provisioning uses
 plan/apply, long-running work is represented by inspectable operations, and API
 failures are structured.
 
+See [`docs/quickstart.md`](docs/quickstart.md) for a minimal end-to-end example.
+
 ## Install
 
 ```sh
@@ -280,7 +282,10 @@ caller cancellation still use their dedicated error codes.
 
 ## Release status
 
-Version `0.1.0` is the initial contract. Its types are generated from the
-vendored Daykeeper OpenAPI commit recorded in
-[`openapi/SOURCE.md`](openapi/SOURCE.md). Releases use the protected,
+Version `0.1.0` is the initial contract, and was published by hand with no
+provenance attestation despite the `publishConfig.provenance` declaration; see
+[`RELEASING.md`](RELEASING.md). `0.2.0` is unreleased and breaking. Types are
+generated from the vendored Daykeeper OpenAPI commit recorded in
+[`openapi/SOURCE.md`](openapi/SOURCE.md); the SDK-to-contract mapping is in
+[`COMPATIBILITY.md`](COMPATIBILITY.md). Releases use the protected,
 provenance-producing process in [`RELEASING.md`](RELEASING.md).

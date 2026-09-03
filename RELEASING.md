@@ -36,7 +36,7 @@ verified with the post-publish check in step 7 below.
    never moved.
 2. **Point `openapi/SOURCE.md` at that tag.** This repository vendors the
    management contract, so `openapi/SOURCE.md` must record the immutable tag
-   name *and* its full commit SHA, plus the file checksum. A branch head or an
+   name _and_ its full commit SHA, plus the file checksum. A branch head or an
    unmerged pull request head is not acceptable in a release. Re-vendor the
    contract from the tag and re-run `pnpm check:generated`.
 
@@ -46,6 +46,7 @@ verified with the post-publish check in step 7 below.
    > snapshot, which is honest but **not releasable**. Shipping 0.2.0 requires
    > that PR to merge, a `daykeeper-openapi` tag to exist, and this file to be
    > updated to that tag. No such tag exists yet; do not invent one.
+
 3. **Finalize the changelog.** The section for the version being released must
    carry the real version heading with no `unreleased` marker left anywhere in
    it, and must include a `### Breaking` subsection when the release breaks

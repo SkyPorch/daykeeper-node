@@ -7,7 +7,13 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import {
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,7 +42,9 @@ function run(command, args, cwd) {
 }
 
 function pack(label) {
-  const directory = mkdtempSync(path.join(tmpdir(), `daykeeper-pack-${label}-`));
+  const directory = mkdtempSync(
+    path.join(tmpdir(), `daykeeper-pack-${label}-`),
+  );
   const [packed] = JSON.parse(
     run(
       "npm",
@@ -47,7 +55,11 @@ function pack(label) {
   const extracted = path.join(directory, "extracted");
   run("mkdir", ["-p", extracted], directory);
   // tar -x, then hash file bytes; mtime is never read.
-  run("tar", ["-x", "-f", path.join(directory, packed.filename), "-C", extracted], directory);
+  run(
+    "tar",
+    ["-x", "-f", path.join(directory, packed.filename), "-C", extracted],
+    directory,
+  );
   return { directory, packed, root: path.join(extracted, "package") };
 }
 
@@ -70,7 +82,9 @@ function digestTree(base) {
   for (const relative of walk(base)) {
     digests.set(
       relative,
-      createHash("sha256").update(readFileSync(path.join(base, relative))).digest("hex"),
+      createHash("sha256")
+        .update(readFileSync(path.join(base, relative)))
+        .digest("hex"),
     );
   }
   return digests;
@@ -91,7 +105,8 @@ try {
     if (left === right) continue;
     if (!left) diff.push(`  + ${name} (only in the second pack)`);
     else if (!right) diff.push(`  - ${name} (only in the first pack)`);
-    else diff.push(`  ~ ${name}\n      first:  ${left}\n      second: ${right}`);
+    else
+      diff.push(`  ~ ${name}\n      first:  ${left}\n      second: ${right}`);
   }
   if (diff.length > 0) {
     failures.push(`npm pack is not reproducible:\n${diff.join("\n")}`);
@@ -105,9 +120,13 @@ try {
     /(^|\/)smoke\//,
     /\.test\.[^/]+$/,
   ];
-  const leaked = names.filter((name) => forbidden.some((pattern) => pattern.test(name)));
+  const leaked = names.filter((name) =>
+    forbidden.some((pattern) => pattern.test(name)),
+  );
   if (leaked.length > 0) {
-    failures.push(`Test or fixture paths are packed:\n${leaked.map((n) => `  ${n}`).join("\n")}`);
+    failures.push(
+      `Test or fixture paths are packed:\n${leaked.map((n) => `  ${n}`).join("\n")}`,
+    );
   }
 
   // 3. Every source map must reference files inside the published dist.
@@ -121,13 +140,21 @@ try {
     }
     const mapDirectory = path.posix.dirname(name);
     for (const source of map.sources ?? []) {
-      if (path.isAbsolute(source) || /^[a-zA-Z]:[\\/]/.test(source) || /^\w+:\/\//.test(source)) {
+      if (
+        path.isAbsolute(source) ||
+        /^[a-zA-Z]:[\\/]/.test(source) ||
+        /^\w+:\/\//.test(source)
+      ) {
         failures.push(`${name} has an absolute source path: ${source}`);
         continue;
       }
-      const resolved = path.posix.normalize(path.posix.join(mapDirectory, source));
+      const resolved = path.posix.normalize(
+        path.posix.join(mapDirectory, source),
+      );
       if (!resolved.startsWith("dist/")) {
-        failures.push(`${name} escapes dist with source: ${source} -> ${resolved}`);
+        failures.push(
+          `${name} escapes dist with source: ${source} -> ${resolved}`,
+        );
       }
     }
   }
