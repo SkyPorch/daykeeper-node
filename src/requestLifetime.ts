@@ -26,8 +26,10 @@ export function createRequestLifetime(timeoutMs: number, caller?: AbortSignal) {
   const timeout = failure
     ? undefined
     : setTimeout(() => abort("REQUEST_TIMEOUT"), timeoutMs);
+  // Strictly past the deadline: work that lands exactly on the boundary is
+  // still on time, and must not be discarded by the next lifetime.run().
   const checkDeadline = () => {
-    if (!failure && now() >= deadline) abort("REQUEST_TIMEOUT");
+    if (!failure && now() > deadline) abort("REQUEST_TIMEOUT");
   };
 
   return {

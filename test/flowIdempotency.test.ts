@@ -443,6 +443,173 @@ test("a value resolving on the deadline boundary is delivered, not discarded", a
   lifetime.dispose();
 });
 
+test("omitting the options argument rejects instead of throwing synchronously", async () => {
+  let called = false;
+  const client = makeClient(async () => {
+    called = true;
+    return Response.json({ data: flowResult(false) });
+  });
+  const mutations = [
+    () => (client.flows.create as never as CallWithoutOptions)("tenant-1", {}),
+    () =>
+      (client.flows.createVersion as never as CallWithoutOptions)("flow-1", {}),
+    () =>
+      (client.flows.publishVersion as never as CallWithoutOptions)(
+        "flow-1",
+        1,
+        {},
+      ),
+  ];
+
+  for (const mutation of mutations) {
+    await assert.rejects(
+      async () => mutation(),
+      (error) => {
+        assert(error instanceof DaykeeperTransportError);
+        assert.equal(error.code, "INVALID_CONFIGURATION");
+        return true;
+      },
+    );
+  }
+  assert.equal(called, false);
+});
+
+test("a body that cannot be read keeps the outcome the status already settled", async (t) => {
+  // A 201 whose body is oversized: the flow was created, only the result is
+  // missing, so the outcome is known.
+  const oversized = makeClient(
+    async () => new Response(new Uint8Array(1024 * 1024 + 1), { status: 201 }),
+  );
+  await assert.rejects(
+    oversized.flows.create(
+      "tenant-1",
+      { name: "Handoff", slug: "handoff", definition: DEFINITION },
+      { idempotencyKey: "flow-create-key-000006" },
+    ),
+    (error) => {
+      assert(error instanceof DaykeeperTransportError);
+      assert.equal(error.code, "RESPONSE_TOO_LARGE");
+      assert.equal(error.outcomeUnknown, false);
+      return true;
+    },
+  );
+
+  // A 400 whose body never arrives: the server rejected the request, so the
+  // mutation was not applied.
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const stalled = makeClient(
+    async () =>
+      new Response(new ReadableStream<Uint8Array>({ start() {} }), {
+        status: 400,
+      }),
+    1000,
+  );
+  const rejected = assert.rejects(
+    stalled.flows.create(
+      "tenant-1",
+      { name: "Handoff", slug: "handoff", definition: DEFINITION },
+      { idempotencyKey: "flow-create-key-000007" },
+    ),
+    (error) => {
+      assert(error instanceof DaykeeperTransportError);
+      assert.equal(error.code, "REQUEST_TIMEOUT");
+      assert.equal(error.outcomeUnknown, false);
+      return true;
+    },
+  );
+  await nextTurn();
+  t.mock.timers.tick(1000);
+  await rejected;
+});
+
+test("a response that arrives exactly on the deadline is still delivered", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let elapsed = 0;
+  t.mock.method(performance, "now", () => elapsed);
+  const client = makeClient(async () => {
+    elapsed = 1000;
+    return Response.json({ data: flowResult(false) }, { status: 201 });
+  }, 1000);
+
+  const created = await client.flows.create(
+    "tenant-1",
+    { name: "Handoff", slug: "handoff", definition: DEFINITION },
+    { idempotencyKey: "flow-create-key-000008" },
+  );
+
+  assert.equal(created.replayed, false);
+});
+
+test("projected error strings are length-bounded", async () => {
+  const client = makeClient(async () =>
+    Response.json(
+      {
+        error: {
+          code: "C".repeat(200),
+          message: "M".repeat(5000),
+          retryable: false,
+          correlationId: "R".repeat(200),
+        },
+      },
+      { status: 409 },
+    ),
+  );
+
+  await assert.rejects(client.flows.get("flow-1"), (error) => {
+    assert(error instanceof DaykeeperApiError);
+    assert.equal(error.code, "HTTP_409");
+    assert.equal(error.message, "The Daykeeper API rejected the request");
+    assert.equal(error.correlationId, undefined);
+    return true;
+  });
+});
+
+test("a correlation identifier from a header must be an opaque token", async () => {
+  const cases: [string, string | undefined][] = [
+    ["edge-request-1", "edge-request-1"],
+    ["https://proxy.example/leak?token=abc", undefined],
+    ["contains a space", undefined],
+    ["R".repeat(200), undefined],
+  ];
+
+  for (const [header, expected] of cases) {
+    const client = makeClient(
+      async () =>
+        new Response("<html>denied</html>", {
+          status: 403,
+          headers: { "content-type": "text/html", "x-request-id": header },
+        }),
+    );
+    await assert.rejects(client.flows.get("flow-1"), (error) => {
+      assert(error instanceof DaykeeperApiError);
+      assert.equal(error.correlationId, expected);
+      return true;
+    });
+  }
+});
+
+test("a transport error keeps its correlation identifier when projected", () => {
+  const error = new DaykeeperTransportError({
+    code: "NETWORK_ERROR",
+    message: "The Daykeeper API could not be reached",
+    outcomeUnknown: true,
+    correlationId: "edge-request-2",
+  });
+
+  assert.equal(error.correlationId, "edge-request-2");
+  assert.equal(error.retryable, false);
+  assert.deepEqual(JSON.parse(JSON.stringify(error)), {
+    name: "DaykeeperTransportError",
+    code: "NETWORK_ERROR",
+    message: "The Daykeeper API could not be reached",
+    retryable: false,
+    outcomeUnknown: true,
+    correlationId: "edge-request-2",
+  });
+});
+
+type CallWithoutOptions = (...args: unknown[]) => Promise<unknown>;
+
 function nextTurn() {
   return new Promise<void>((resolve) => setImmediate(resolve));
 }

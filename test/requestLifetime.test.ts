@@ -167,7 +167,7 @@ test("a stalled body is cancelled without waiting for its cleanup promise", asyn
     timeoutMs: 1000,
     fetch: async () => new Response(body),
   });
-  const rejected = rejectsCode(request(), "REQUEST_TIMEOUT", true);
+  const rejected = rejectsCode(request(), "REQUEST_TIMEOUT");
   await nextTurn();
   assert.equal(body.locked, true);
   t.mock.timers.tick(1000);
@@ -196,7 +196,7 @@ test("throwing stream cleanup cannot replace timeout or cancellation", async (t)
       timeoutMs: 1000,
       fetch: async () => response,
     });
-    const rejected = rejectsCode(request(caller.signal), code, true);
+    const rejected = rejectsCode(request(caller.signal), code);
     await nextTurn();
     if (code === "REQUEST_TIMEOUT") t.mock.timers.tick(1000);
     else caller.abort();
@@ -216,7 +216,7 @@ test("caller abort during body reading remains REQUEST_ABORTED", async () => {
     },
   });
   const request = makeRequest({ fetch: async () => new Response(body) });
-  const rejected = rejectsCode(request(caller.signal), "REQUEST_ABORTED", true);
+  const rejected = rejectsCode(request(caller.signal), "REQUEST_ABORTED");
   await nextTurn();
   caller.abort(new Error("private reason"));
   await rejected;
@@ -315,7 +315,7 @@ test("oversized bodies fail without waiting for cancellation", async () => {
             : {},
         }),
     });
-    await rejectsCode(request(), "RESPONSE_TOO_LARGE", true);
+    await rejectsCode(request(), "RESPONSE_TOO_LARGE");
     assert.equal(discarded, true);
     assert.equal(body.locked, false);
   }
@@ -436,7 +436,7 @@ test("an errored response stream releases its reader and hides raw errors", asyn
     },
   });
   const request = makeRequest({ fetch: async () => new Response(body) });
-  const rejected = rejectsCode(request(), "NETWORK_ERROR", true);
+  const rejected = rejectsCode(request(), "NETWORK_ERROR");
   await nextTurn();
   streamController.error(new Error("private network failure"));
   await rejected;
@@ -524,7 +524,7 @@ test(
       timeoutMs: 1000,
       fetch,
     });
-    await rejectsCode(request(), "REQUEST_TIMEOUT", true);
+    await rejectsCode(request(), "REQUEST_TIMEOUT");
     assert.equal(requests, 1);
   },
 );

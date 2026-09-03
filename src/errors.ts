@@ -21,14 +21,18 @@ export interface DaykeeperErrorJson {
 }
 
 /**
- * A rejection the Daykeeper API returned. Only contract fields are projected:
- * no raw server body, header, or upstream diagnostic reaches the caller.
+ * A rejection carrying an HTTP status. It is normally the Daykeeper API's own
+ * error envelope, but a proxy or load balancer can reject a request too, in
+ * which case the code is derived from the status. Only contract fields are
+ * projected, each length-bounded, and a correlation identifier taken from a
+ * response header must match an opaque token shape. No other part of the
+ * response body, and no other header, reaches the caller.
  */
 export class DaykeeperApiError extends Error {
   readonly status: number;
   readonly code: string;
   readonly retryable: boolean;
-  /** Always false: the server answered, so the outcome is known. */
+  /** Always false: a status was received, so the outcome is known. */
   readonly outcomeUnknown: boolean;
   readonly nextActions: readonly string[];
   readonly correlationId?: string;

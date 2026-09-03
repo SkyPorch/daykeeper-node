@@ -69,6 +69,13 @@ const ALLOWED_PATHS: readonly RegExp[] = [
 
 const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9._:-]{16,128}$/;
 
+// Bounds for values projected out of a rejection the SDK did not author.
+const MAX_CODE_LENGTH = 128;
+const MAX_MESSAGE_LENGTH = 1024;
+const MAX_CORRELATION_ID_LENGTH = 128;
+// A correlation identifier is an opaque token, never free text or a URL.
+const CORRELATION_ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
+
 /**
  * Create a key for one logical mutation. Reuse the returned value when you
  * repeat a call whose outcome you do not know; never call this inside a retry.
@@ -359,7 +366,7 @@ export class DaykeeperClient {
             body: input,
             idempotencyKey: requestOptions?.idempotencyKey,
             requireIdempotencyKey: true,
-            signal: requestOptions.signal,
+            signal: requestOptions?.signal,
           },
         ),
     };
@@ -450,10 +457,13 @@ export class DaykeeperClient {
       try {
         payload = await readJson(response, lifetime);
       } catch (error) {
+        // The response status already settled the outcome, even for a mutation:
+        // a 2xx applied the change and a 4xx did not. Only the result body is
+        // missing, so this is not an unknown outcome.
         payloadFailure = this.#failure(error, {
           code: "NETWORK_ERROR",
           message: "The Daykeeper response could not be read",
-          outcomeUnknown: mutates,
+          outcomeUnknown: false,
         });
         // A cancelled or expired read says nothing about the response status.
         if (
@@ -503,6 +513,7 @@ export class DaykeeperClient {
         code: error.code,
         message: error.message,
         outcomeUnknown: true,
+        correlationId: error.correlationId,
       });
     }
     return new DaykeeperTransportError({
@@ -675,9 +686,11 @@ function apiError(response: Response, payload: unknown): DaykeeperApiError {
     isRecord(payload) && isRecord(payload.error) ? payload.error : {};
   return new DaykeeperApiError({
     status: response.status,
-    code: stringValue(body.code) ?? `HTTP_${response.status}`,
+    code:
+      boundedString(body.code, MAX_CODE_LENGTH) ?? `HTTP_${response.status}`,
     message:
-      stringValue(body.message) ?? "The Daykeeper API rejected the request",
+      boundedString(body.message, MAX_MESSAGE_LENGTH) ??
+      "The Daykeeper API rejected the request",
     retryable:
       typeof body.retryable === "boolean"
         ? body.retryable
@@ -686,11 +699,24 @@ function apiError(response: Response, payload: unknown): DaykeeperApiError {
           response.status >= 500,
     nextActions: stringArray(body.nextActions),
     correlationId:
-      stringValue(body.correlationId) ??
-      response.headers.get("x-request-id") ??
-      undefined,
+      boundedString(body.correlationId, MAX_CORRELATION_ID_LENGTH) ??
+      safeCorrelationId(response.headers.get("x-request-id")),
     fields: stringArray(body.fields),
   });
+}
+
+// A rejection can come from a proxy, not from Daykeeper. Bound what is copied
+// out of it so an oversized or shapeless value cannot ride along in a log line
+// or an error report.
+function boundedString(value: unknown, maxLength: number): string | undefined {
+  const text = stringValue(value);
+  if (text === undefined || !text || text.length > maxLength) return undefined;
+  return text;
+}
+
+function safeCorrelationId(value: string | null): string | undefined {
+  if (value === null) return undefined;
+  return CORRELATION_ID_PATTERN.test(value) ? value : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
