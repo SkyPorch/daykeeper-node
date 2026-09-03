@@ -8,9 +8,12 @@
   and `flows.publishVersion`, send it as `Idempotency-Key`, and expose
   `replayed` on the result. Add `generateIdempotencyKey()` for callers that want
   one; the SDK never generates a key inside a retry.
-- Report a mutation that fails after dispatch as `outcomeUnknown: true` and
-  never retryable. Recover by repeating the same call with the same idempotency
-  key, which returns the stored result instead of applying the change twice.
+- Report a mutation that fails before any response arrives as
+  `outcomeUnknown: true` and never retryable. Recover by repeating the same call
+  with the same idempotency key, which returns the stored result instead of
+  applying the change twice. Once a status has been received the outcome is
+  known even if the body cannot be read, so an unreadable `201` or a timed-out
+  `400` body reports `outcomeUnknown: false`.
 - Restrict the single authentication refresh after a `401` to reads and to
   mutations that carry an idempotency key. A keyless mutation is never sent
   twice. Read behavior is unchanged.
@@ -18,9 +21,15 @@
   path level behind an encoded separator.
 - Project errors as contract fields only: `code`, `status`, `retryable`,
   `outcomeUnknown`, `correlationId`, `message`, `nextActions` and `fields`. No
-  raw server body reaches the caller.
+  raw server body reaches the caller. `code`, `message` and `correlationId` are
+  length-bounded, and a correlation identifier read from the `x-request-id`
+  header must match an opaque token shape, so a proxy cannot push free text or a
+  URL into a caller's error report.
 - Keep a response that resolves exactly on the deadline instead of discarding it
-  as a timeout.
+  as a timeout. The deadline is now strictly exclusive, so a result that lands on
+  the boundary survives the next lifetime check as well.
+- Reject a flow mutation called without its options argument as
+  `INVALID_CONFIGURATION` instead of throwing a synchronous `TypeError`.
 - Classify a non-JSON rejection, such as a proxy `403` page, by its status
   instead of reporting a retryable `INVALID_RESPONSE`.
 - Add typed agent credential list, reveal-once create, and revoke methods with
