@@ -67,15 +67,26 @@ test("domain verification methods use the fixed contract and idempotency", async
 });
 
 test("domain verification create validates origin and requires idempotency", async () => {
+  let calls = 0;
   const client = new DaykeeperClient({
     baseUrl: "https://api.example.com",
     apiKey: "key",
-    fetch: async () => Response.json({ data: result }),
+    fetch: async () => {
+      calls += 1;
+      return Response.json({ data: result });
+    },
   });
   assert.throws(() =>
     client.domainVerifications.create(
       "tenant-1",
       { origin: "http://example.com" },
+      { idempotencyKey: "domain-create-0001" },
+    ),
+  );
+  assert.throws(() =>
+    client.domainVerifications.create(
+      "tenant-1",
+      { origin: "https://127.0.0.1" },
       { idempotencyKey: "domain-create-0001" },
     ),
   );
@@ -86,4 +97,5 @@ test("domain verification create validates origin and requires idempotency", asy
       {} as never,
     ),
   );
+  assert.equal(calls, 0);
 });

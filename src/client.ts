@@ -359,9 +359,9 @@ export class DaykeeperClient {
           {
             method: "POST",
             body: validateDomainVerificationInput(input),
-            idempotencyKey: requestOptions.idempotencyKey,
+            idempotencyKey: requestOptions?.idempotencyKey,
             requireIdempotencyKey: true,
-            signal: requestOptions.signal,
+            signal: requestOptions?.signal,
           },
         ),
       get: (tenantId, verificationId, requestOptions = {}) =>
@@ -689,10 +689,15 @@ function validateDomainVerificationInput(
     url.password ||
     url.search ||
     url.hash ||
-    url.pathname !== "/"
+    url.pathname !== "/" ||
+    isIpLiteral(url.hostname)
   )
     throw configurationError("A valid domain verification origin is required");
   return { origin: value.origin };
+}
+
+function isIpLiteral(hostname: string): boolean {
+  return hostname.includes(":") || /^(?:\d{1,3}\.){3}\d{1,3}$/.test(hostname);
 }
 
 function validateHeaderValue(
