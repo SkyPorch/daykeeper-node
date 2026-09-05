@@ -134,6 +134,8 @@ try {
     // @ts-expect-error Onboarding must not accept a management credential.
     new DaykeeperOnboardingClient({baseUrl:'https://example.test',apiKey:'secret'});
     void proof;
+    const machineInboxPlan = client.tenants.plan({name:'Acme',slug:'acme',locale:'en',website:{websiteUrl:'https://example.test'}});
+    void machineInboxPlan;
     const agent = new DaykeeperClient({ baseUrl: 'https://example.test', apiKey: 'test-api-key' });
     const channel: Promise<WebsiteChannel> = client.websiteChannels.get('tenant');
     const operation: Promise<Operation> = client.tenants.getProvisioningOperation('tenant', {signal: AbortSignal.timeout(5000)});
@@ -171,6 +173,8 @@ try {
       return signer.signEnrollment(challenge,intent,{audience:'https://example.test/enrollment'});
     }
     void signupTypes;
+    const machineInboxPlan = client.tenants.plan({name:'Acme',slug:'acme',locale:'en',website:{websiteUrl:'https://example.test'}});
+    void machineInboxPlan;
     const channel: Promise<sdk.WebsiteChannel> = client.websiteChannels.get('tenant');
     const operation: Promise<sdk.Operation> = client.tenants.getProvisioningOperation('tenant');
     const usage: Promise<sdk.UsageStatus> = client.usage.get();

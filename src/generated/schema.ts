@@ -865,7 +865,8 @@ export interface components {
             /** Format: email */
             supportEmail?: string;
             website?: components["schemas"]["WebsiteInboxSpec"];
-            administrator: {
+            /** @description Optional legacy contact metadata; it does not establish ownership or access. */
+            administrator?: {
                 name: string;
                 /** Format: email */
                 email: string;

@@ -66,6 +66,21 @@ const daykeeper = new DaykeeperClient({
   apiKey: signup.token,
 });
 const entitlements = await daykeeper.entitlements.get();
+// No human administrator name or email is required for a machine-owned inbox.
+const inboxPlan = await daykeeper.tenants.plan({
+  name: "Acme Support",
+  slug: "acme-support",
+  locale: "en-US",
+  website: { websiteUrl: "https://example.com" },
+});
+// Save this intent ID and plan before applying. Replay with the same ID if lost.
+const inbox = await daykeeper.tenants.apply(
+  { planId: inboxPlan.id, planVersion: inboxPlan.version },
+  { idempotencyKey: savedInboxIntentId },
+);
+const operation = await daykeeper.operations.get(inbox.operation.id);
+// Inspect websiteChannels.get(inbox.tenant.id) after provisioning succeeds.
+// A prepared inbox still does not mean customer traffic is enabled.
 ```
 
 The onboarding client sends no cookies or management authorization, follows no

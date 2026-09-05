@@ -22,6 +22,9 @@
 
 ### Changes
 
+- Allow machine-owned tenant plans to omit the optional legacy `administrator`
+  contact metadata. When supplied, its name and email remain validated; it
+  never establishes ownership or access.
 - Add an unauthenticated, signed-body onboarding client for independent machine
   signup, credential rotation, and read-only current-credential recovery. No
   cookies, authorization headers, redirects, or automatic retries are used.

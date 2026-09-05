@@ -85,6 +85,28 @@ test("website settings remain optional in existing tenant plan requests and serv
   assert.deepEqual(bodies, [account, { ...account, website }]);
 });
 
+test("machine-owned tenant plans may omit legacy administrator metadata", async () => {
+  let body: unknown;
+  const client = new DaykeeperClient({
+    baseUrl: "https://api.example.test",
+    token: "token",
+    fetch: async (_input, init) => {
+      body = await new Request(_input, init).json();
+      return Response.json({ data: { id: "plan-id" } });
+    },
+  });
+  await client.tenants.plan({
+    name: "Machine workspace",
+    slug: "machine-workspace",
+    locale: "en",
+  });
+  assert.deepEqual(body, {
+    name: "Machine workspace",
+    slug: "machine-workspace",
+    locale: "en",
+  });
+});
+
 test("older capability responses remain compatible and do not imply website or traffic support", async () => {
   const capabilities: DaykeeperCapabilities = {
     apiVersion: "v1",

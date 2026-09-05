@@ -2,13 +2,13 @@
 
 `daykeeper.yaml` is an exact, byte-for-byte copy of `openapi/daykeeper.yaml`
 from `SkyPorch/daykeeper-openapi`, commit
-`7d461325c7abffb190f597bd58c8cda0cb596487`
-(`codex/daykeeper-machine-onboarding-contract`, stacked on PR #15,
-`codex/daykeeper-flow-idempotency-contract`, commit
-`16f1ba8f59699e27c804947fd5d5cca88edd1143`).
+`8c4badfa3dac3e09431f1db3923e566d3d9f2942`
+(`codex/daykeeper-optional-admin-metadata`, stacked on PR #16,
+`codex/daykeeper-machine-onboarding-contract`, commit
+`7d461325c7abffb190f597bd58c8cda0cb596487`).
 
-- SHA-256: `298678104c131e2185e90cee0f94dc234d24d8af7c7cbb673f7c229af8832022`
-- Git blob: `0a7789ce9f6231d43f10301ed1c24989248b816d`
+- SHA-256: `f771b9566088a54459dc6654f470d41c8575719110f3b0f466c377c682aaab93`
+- Git blob: `9bdefb37d51ff65a7eae95befaf4a7f124225934`
 - Tag status: unreleased commit snapshot; no new upstream tag is claimed.
 
 There is no local delta. This repository does not modify the vendored contract.
@@ -41,6 +41,9 @@ baseline this snapshot carries five unreleased upstream changes:
    current-credential inspection. These five signed-body routes explicitly
    disable inherited OAuth requirements, expose raw response objects, and keep
    secret-bearing issuance separate from metadata-only replay and recovery.
+   Tenant administrator contact metadata is now optional; supplying it never
+   establishes human ownership or grants provider access. Existing metadata is
+   still validated and preserved.
 
 ## Standing notes
 
