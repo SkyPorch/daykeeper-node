@@ -2229,10 +2229,12 @@ export interface operations {
                     "application/json": components["schemas"]["DomainVerificationResponse"];
                 };
             };
+            400: components["responses"]["DomainError"];
             401: components["responses"]["DomainError"];
             403: components["responses"]["DomainError"];
             404: components["responses"]["DomainError"];
             429: components["responses"]["DomainRateLimited"];
+            503: components["responses"]["DomainError"];
         };
     };
     verifyDomainVerification: {
@@ -2298,12 +2300,15 @@ export interface operations {
                     "application/json": components["schemas"]["DomainVerificationResponse"];
                 };
             };
+            400: components["responses"]["DomainError"];
             401: components["responses"]["DomainError"];
             403: components["responses"]["DomainError"];
             404: components["responses"]["DomainError"];
+            409: components["responses"]["DomainError"];
             413: components["responses"]["DomainRequestError"];
             415: components["responses"]["DomainRequestError"];
             429: components["responses"]["DomainRateLimited"];
+            503: components["responses"]["DomainError"];
         };
     };
     getTenantProvisioningOperation: {
