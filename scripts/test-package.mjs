@@ -80,8 +80,26 @@ try {
     `
     import assert from 'node:assert/strict';
     import { createRequire } from 'node:module';
-    import { DaykeeperClient as EsmClient } from '@skyporch/daykeeper';
-    const { DaykeeperClient: CjsClient } = createRequire(import.meta.url)('@skyporch/daykeeper');
+    import * as esm from '@skyporch/daykeeper';
+    const cjs = createRequire(import.meta.url)('@skyporch/daykeeper');
+    const EsmClient = esm.DaykeeperClient;
+    const CjsClient = cjs.DaykeeperClient;
+    for (const sdk of [esm, cjs]) {
+      const signer = await sdk.DaykeeperMachineSigner.generate();
+      const restored = await sdk.DaykeeperMachineSigner.fromPrivateKey(await signer.exportPrivateKey());
+      assert.deepEqual(restored.publicKey, signer.publicKey);
+      let calls = 0;
+      const onboarding = new sdk.DaykeeperOnboardingClient({ baseUrl: 'https://api.example.test', fetch: async (url, init) => {
+        calls++;
+        assert.equal(new URL(url).pathname, '/v1/machine-enrollments/challenges');
+        assert.equal(init.credentials, 'omit');
+        assert.equal(init.redirect, 'error');
+        assert.equal(new Headers(init.headers).has('authorization'), false);
+        return Response.json({error:{code:'BOOTSTRAP_UNAVAILABLE',message:'untrusted'}}, {status:503});
+      }});
+      await assert.rejects(() => onboarding.enrollments.challenge({name:'Acme',idempotencyKey:'signup-intent-0001',publicKey:signer.publicKey}), error => error instanceof sdk.DaykeeperOnboardingApiError && error.outcomeUnknown && !error.retryable && !error.message.includes('untrusted'));
+      assert.equal(calls, 1);
+    }
     for (const Client of [EsmClient, CjsClient]) {
       const paths = [];
       const client = new Client({ baseUrl: 'https://api.example.test', apiKey: 'synthetic-api-key', fetch: async (input, init) => {
@@ -107,6 +125,15 @@ try {
     `
     import { DaykeeperClient, type AgentCredentialPage, type CreateAgentCredentialResult, type WebsiteInboxSpec, type WebsiteChannel, type EntitlementStatus, type UsageStatus, type UsageResourceStatus, type Operation } from '@skyporch/daykeeper';
     const client = new DaykeeperClient({ baseUrl: 'https://example.test', token: 'test-token' });
+    import { DaykeeperOnboardingClient, DaykeeperMachineSigner, type MachineChallenge } from '@skyporch/daykeeper';
+    const onboarding = new DaykeeperOnboardingClient({baseUrl:'https://example.test'});
+    const signer = await DaykeeperMachineSigner.generate();
+    const intent = {name:'Acme',idempotencyKey:'signup-intent-0001',publicKey:signer.publicKey};
+    const challenge: MachineChallenge = await onboarding.enrollments.challenge(intent);
+    const proof: string = await signer.signEnrollment(challenge,intent,{audience:'https://example.test/enrollment'});
+    // @ts-expect-error Onboarding must not accept a management credential.
+    new DaykeeperOnboardingClient({baseUrl:'https://example.test',apiKey:'secret'});
+    void proof;
     const agent = new DaykeeperClient({ baseUrl: 'https://example.test', apiKey: 'test-api-key' });
     const channel: Promise<WebsiteChannel> = client.websiteChannels.get('tenant');
     const operation: Promise<Operation> = client.tenants.getProvisioningOperation('tenant', {signal: AbortSignal.timeout(5000)});
@@ -136,6 +163,14 @@ try {
     `
     import sdk = require('@skyporch/daykeeper');
     const client = new sdk.DaykeeperClient({ baseUrl: 'https://example.test', token: 'test-token' });
+    const onboarding = new sdk.DaykeeperOnboardingClient({baseUrl:'https://example.test'});
+    async function signupTypes() {
+      const signer = await sdk.DaykeeperMachineSigner.generate();
+      const intent = {name:'Acme',idempotencyKey:'signup-intent-0001',publicKey:signer.publicKey};
+      const challenge: sdk.MachineChallenge = await onboarding.enrollments.challenge(intent);
+      return signer.signEnrollment(challenge,intent,{audience:'https://example.test/enrollment'});
+    }
+    void signupTypes;
     const channel: Promise<sdk.WebsiteChannel> = client.websiteChannels.get('tenant');
     const operation: Promise<sdk.Operation> = client.tenants.getProvisioningOperation('tenant');
     const usage: Promise<sdk.UsageStatus> = client.usage.get();

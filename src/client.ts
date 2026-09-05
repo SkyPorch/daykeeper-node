@@ -557,7 +557,7 @@ async function resolveToken(
   }
 }
 
-function parseBaseUrl(value: string): URL {
+export function parseBaseUrl(value: string): URL {
   let url: URL;
   try {
     url = new URL(value);
@@ -585,7 +585,7 @@ function parseBaseUrl(value: string): URL {
   return url;
 }
 
-function validateTimeout(value: number): number {
+export function validateTimeout(value: number): number {
   if (!Number.isInteger(value) || value < 1_000 || value > 60_000) {
     throw configurationError(
       "timeoutMs must be an integer from 1000 through 60000",
@@ -635,7 +635,7 @@ function validateIdempotencyKey(value: string): string {
   );
 }
 
-async function readJson(
+export async function readJson(
   response: Response,
   lifetime: ReturnType<typeof createRequestLifetime>,
 ): Promise<unknown> {

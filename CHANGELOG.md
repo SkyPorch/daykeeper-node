@@ -22,6 +22,14 @@
 
 ### Changes
 
+- Add an unauthenticated, signed-body onboarding client for independent machine
+  signup, credential rotation, and read-only current-credential recovery. No
+  cookies, authorization headers, redirects, or automatic retries are used.
+- Add a dependency-free WebCrypto ES256 machine owner signer with explicit key
+  export, pinned audiences, and intent-bound proofs. Private keys and reveal-once
+  credentials remain caller-managed secrets. These APIs are unreleased and do
+  not enable hosted signup or customer traffic on their own.
+
 - Require an explicit `idempotencyKey` on `flows.create`, `flows.createVersion`
   and `flows.publishVersion`, send it as `Idempotency-Key`, and expose
   `replayed` on the result. Add `generateIdempotencyKey()` for callers that want

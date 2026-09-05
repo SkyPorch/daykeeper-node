@@ -585,6 +585,96 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/machine-enrollments/challenges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a signed machine enrollment challenge
+         * @description Creates a short-lived challenge for a machine workspace enrollment.
+         *     This endpoint uses signed body proofs and deliberately accepts neither
+         *     bearer authorization nor browser credentials.
+         */
+        post: operations["createMachineEnrollmentChallenge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/machine-enrollments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Enroll a machine workspace with a signed proof */
+        post: operations["enrollMachineWorkspace"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/machine-credential-rotations/challenges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a signed machine credential rotation challenge */
+        post: operations["createMachineCredentialRotationChallenge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/machine-credential-rotations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rotate a machine credential with a signed proof */
+        post: operations["rotateMachineCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/machine-credential-rotations/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Inspect the current machine credential with a signed proof */
+        post: operations["inspectMachineCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1122,6 +1212,93 @@ export interface components {
         };
         PublishFlowVersionInput: {
             expectedResourceVersion: number;
+        };
+        MachinePublicKey: {
+            /** @constant */
+            kty: "EC";
+            /** @constant */
+            crv: "P-256";
+            x: string;
+            y: string;
+        };
+        MachineEnrollmentInput: {
+            name: string;
+            idempotencyKey: string;
+            publicKey: components["schemas"]["MachinePublicKey"];
+        };
+        MachineChallenge: {
+            /** Format: uuid */
+            challengeId: string;
+            /** Format: uri */
+            audience: string;
+            nonce: string;
+            keyThumbprint: string;
+            requestHash: string;
+            createdAt: number;
+            expiresAt: number;
+        };
+        MachineProofInput: {
+            /** Format: uuid */
+            challengeId: string;
+            proof: string;
+        };
+        MachineEnrollmentResult: {
+            /** Format: uuid */
+            ownerId: string;
+            /** Format: uuid */
+            organizationId: string;
+            organizationSlug: string;
+            credentialIssued: boolean;
+            credential: {
+                /** Format: uuid */
+                id: string;
+                /** Format: date-time */
+                expiresAt: string;
+                /** Format: date-time */
+                revokedAt: string | null;
+                /** @constant */
+                policyVersion: "machine-onboarding-v1";
+            };
+            replayed: boolean;
+            token: string | null;
+        };
+        MachineRotationInput: {
+            /** Format: uuid */
+            ownerId: string;
+            /** Format: uuid */
+            expectedCredentialId: string;
+            /** Format: uuid */
+            intentId: string;
+        };
+        MachineRotationResult: {
+            /** Format: uuid */
+            ownerId: string;
+            /** Format: uuid */
+            organizationId: string;
+            /** Format: uuid */
+            credentialId: string;
+            /** Format: uuid */
+            predecessorId: string;
+            /** Format: uuid */
+            intentId: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /** Format: date-time */
+            revokedAt: string | null;
+            replayed: boolean;
+            token: string | null;
+        };
+        MachineCredentialMetadata: {
+            /** Format: uuid */
+            ownerId: string;
+            /** Format: uuid */
+            organizationId: string;
+            /** Format: uuid */
+            credentialId: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /** Format: date-time */
+            revokedAt: string | null;
         };
         /**
          * @description A scope that a human owner may delegate to a headless agent credential.
@@ -2132,6 +2309,162 @@ export interface operations {
             400: components["responses"]["Error"];
             401: components["responses"]["Error"];
             409: components["responses"]["IdempotencyKeyReused"];
+            default: components["responses"]["Error"];
+        };
+    };
+    createMachineEnrollmentChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MachineEnrollmentInput"];
+            };
+        };
+        responses: {
+            /** @description A newly created enrollment challenge. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineChallenge"];
+                };
+            };
+            400: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    enrollMachineWorkspace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MachineProofInput"];
+            };
+        };
+        responses: {
+            /** @description The original enrollment result was replayed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineEnrollmentResult"];
+                };
+            };
+            /** @description A workspace was newly allocated and a credential issued. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineEnrollmentResult"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    createMachineCredentialRotationChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MachineRotationInput"];
+            };
+        };
+        responses: {
+            /** @description A newly created credential rotation challenge. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineChallenge"];
+                };
+            };
+            400: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    rotateMachineCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MachineProofInput"];
+            };
+        };
+        responses: {
+            /** @description The original rotation result was replayed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineRotationResult"];
+                };
+            };
+            /** @description A new machine credential was issued. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineRotationResult"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    inspectMachineCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MachineProofInput"];
+            };
+        };
+        responses: {
+            /** @description Current machine credential metadata. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineCredentialMetadata"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            429: components["responses"]["Error"];
             default: components["responses"]["Error"];
         };
     };

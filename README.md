@@ -22,6 +22,75 @@ customer-facing browser experiences.
 
 ## Use
 
+### Independent agent signup (unreleased)
+
+The 0.2.0 candidate includes signed signup without a human login. These routes
+must first be enabled by your Daykeeper operator; this is not yet a hosted
+availability announcement. Signup creates a workspace and a scoped seven-day
+credential, not a provisioned inbox or an active customer route.
+
+Generate an owner key once with `createMachineOwnerKey()` and save its private
+JWK in your secret store **before** requesting signup. Retain it independently
+of the API credential: it is needed for credential rotation and recovery. Never
+log or put the private key, proof, or returned token in source control.
+
+```ts
+import {
+  DaykeeperClient,
+  DaykeeperMachineSigner,
+  DaykeeperOnboardingClient,
+} from "@skyporch/daykeeper";
+
+// Load the previously saved private JWK from your secret store.
+const signer = await DaykeeperMachineSigner.fromPrivateKey(savedPrivateJwk);
+const onboarding = new DaykeeperOnboardingClient({ baseUrl: daykeeperApiUrl });
+// Pin the HTTPS audience from trusted operator configuration, not the response.
+const audience = configuredEnrollmentAudience;
+// Persist this exact intent before sending; reuse it for recovery.
+const input = {
+  name: "Acme Support",
+  idempotencyKey: savedSignupIntentId,
+  publicKey: signer.publicKey,
+};
+const challenge = await onboarding.enrollments.challenge(input);
+const proof = await signer.signEnrollment(challenge, input, { audience });
+const signup = await onboarding.enrollments.create({
+  challengeId: challenge.challengeId,
+  proof,
+});
+// Persist ownerId, organizationId, credential metadata, and the reveal-once
+// token securely before proceeding. A replay has token: null.
+if (signup.token === null) throw new Error("Recover the credential first");
+const daykeeper = new DaykeeperClient({
+  baseUrl: daykeeperApiUrl,
+  apiKey: signup.token,
+});
+const entitlements = await daykeeper.entitlements.get();
+```
+
+The onboarding client sends no cookies or management authorization, follows no
+redirects, and never retries. Sign a freshly fetched challenge promptly: proofs
+last at most 60 seconds from its creation. Check `outcomeUnknown` on errors;
+an unreadable success or server failure can hide a committed mutation. Repeat
+the original enrollment intent with a fresh challenge to recover its metadata,
+not its secret. Never generate another owner key to retry a lost signup.
+
+For rotation, persist `{ ownerId, expectedCredentialId, intentId }`, call
+`credentialRotations.challenge`, sign with `signRotation` and the separately
+configured rotation audience, then call `credentialRotations.create`. The old
+credential is revoked atomically when the new one is issued. Replays return
+metadata with `token: null`. After losing a rotation response, use a fresh
+signed rotation proof with `credentialRotations.current` to discover the current
+credential ID without changing it. Create a new explicit rotation intent using
+that ID to obtain a replacement token. Do not automatically rotate on a timeout:
+another process may already be using the successor.
+
+Use the management API below to plan and provision an inbox after signup.
+Preparation does not enable customer traffic; readiness and route activation
+remain separate operator-controlled gates.
+
+### Management API
+
 ```ts
 import { DaykeeperClient } from "@skyporch/daykeeper";
 

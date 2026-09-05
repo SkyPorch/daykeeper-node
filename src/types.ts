@@ -24,6 +24,14 @@ export type CreateAgentCredentialResult =
   Schemas["CreateAgentCredentialResult"];
 export type RevokeAgentCredentialResult =
   Schemas["RevokeAgentCredentialResult"];
+export type MachinePublicKey = Schemas["MachinePublicKey"];
+export type MachineEnrollmentInput = Schemas["MachineEnrollmentInput"];
+export type MachineChallenge = Schemas["MachineChallenge"];
+export type MachineProofInput = Schemas["MachineProofInput"];
+export type MachineEnrollmentResult = Schemas["MachineEnrollmentResult"];
+export type MachineRotationInput = Schemas["MachineRotationInput"];
+export type MachineRotationResult = Schemas["MachineRotationResult"];
+export type MachineCredentialMetadata = Schemas["MachineCredentialMetadata"];
 export type WebsiteInboxSpec = Schemas["WebsiteInboxSpec"];
 export type WebsiteChannel = Schemas["WebsiteChannel"];
 export type DaykeeperScope = Schemas["DaykeeperScope"];
