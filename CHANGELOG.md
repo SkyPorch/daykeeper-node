@@ -22,6 +22,10 @@
 
 ### Changes
 
+- Add machine-owner-only domain verification methods for creating, inspecting,
+  verifying, and revoking DNS TXT challenges. Verification records are receipts
+  and do not activate customer traffic.
+
 - Allow machine-owned tenant plans to omit the optional legacy `administrator`
   contact metadata. When supplied, its name and email remain validated; it
   never establishes ownership or access.

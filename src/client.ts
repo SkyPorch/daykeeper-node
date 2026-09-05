@@ -32,6 +32,8 @@ import type {
   Tenant,
   TenantPlan,
   TenantSpec,
+  DomainVerification,
+  DomainVerificationInput,
 } from "./types.js";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -56,6 +58,10 @@ const ALLOWED_PATHS: readonly RegExp[] = [
   `/v1/tenants/${SEGMENT}/email-channel-plans`,
   `/v1/tenants/${SEGMENT}/email-channel`,
   `/v1/tenants/${SEGMENT}/customer-sessions`,
+  `/v1/tenants/${SEGMENT}/domain-verifications`,
+  `/v1/tenants/${SEGMENT}/domain-verifications/${SEGMENT}`,
+  `/v1/tenants/${SEGMENT}/domain-verifications/${SEGMENT}/verify`,
+  `/v1/tenants/${SEGMENT}/domain-verifications/${SEGMENT}/revoke`,
   `/v1/tenants/${SEGMENT}/flows`,
   "/v1/email-channels:apply",
   `/v1/operations/${SEGMENT}`,
@@ -185,6 +191,28 @@ export class DaykeeperClient {
       input: CreateCustomerSessionInput,
       options?: DaykeeperRequestOptions,
     ) => Promise<CustomerSession>;
+  };
+  readonly domainVerifications: {
+    create: (
+      tenantId: string,
+      input: DomainVerificationInput,
+      options: DaykeeperIdempotencyOptions,
+    ) => Promise<DomainVerification>;
+    get: (
+      tenantId: string,
+      verificationId: string,
+      options?: DaykeeperRequestOptions,
+    ) => Promise<DomainVerification>;
+    verify: (
+      tenantId: string,
+      verificationId: string,
+      options?: DaykeeperRequestOptions,
+    ) => Promise<DomainVerification>;
+    revoke: (
+      tenantId: string,
+      verificationId: string,
+      options?: DaykeeperRequestOptions,
+    ) => Promise<DomainVerification>;
   };
   readonly operations: {
     get: (operationId: string) => Promise<Operation>;
@@ -322,6 +350,34 @@ export class DaykeeperClient {
             body: input,
             signal: requestOptions?.signal,
           },
+        ),
+    };
+    this.domainVerifications = {
+      create: (tenantId, input, requestOptions) =>
+        this.#request(
+          `/v1/tenants/${pathSegment(tenantId)}/domain-verifications`,
+          {
+            method: "POST",
+            body: validateDomainVerificationInput(input),
+            idempotencyKey: requestOptions.idempotencyKey,
+            requireIdempotencyKey: true,
+            signal: requestOptions.signal,
+          },
+        ),
+      get: (tenantId, verificationId, requestOptions = {}) =>
+        this.#request(
+          `/v1/tenants/${pathSegment(tenantId)}/domain-verifications/${pathSegment(verificationId)}`,
+          { signal: requestOptions.signal },
+        ),
+      verify: (tenantId, verificationId, requestOptions = {}) =>
+        this.#request(
+          `/v1/tenants/${pathSegment(tenantId)}/domain-verifications/${pathSegment(verificationId)}/verify`,
+          { method: "POST", body: {}, signal: requestOptions.signal },
+        ),
+      revoke: (tenantId, verificationId, requestOptions = {}) =>
+        this.#request(
+          `/v1/tenants/${pathSegment(tenantId)}/domain-verifications/${pathSegment(verificationId)}/revoke`,
+          { method: "POST", body: {}, signal: requestOptions.signal },
         ),
     };
     this.operations = {
@@ -608,6 +664,35 @@ function positiveInteger(value: number): number {
     throw configurationError("Version must be a positive integer");
   }
   return value;
+}
+
+function validateDomainVerificationInput(
+  value: DomainVerificationInput,
+): DomainVerificationInput {
+  if (
+    !value ||
+    Object.keys(value).sort().join(",") !== "origin" ||
+    typeof value.origin !== "string" ||
+    value.origin.length < 1 ||
+    value.origin.length > 253
+  )
+    throw configurationError("A valid domain verification origin is required");
+  let url: URL;
+  try {
+    url = new URL(value.origin);
+  } catch {
+    throw configurationError("A valid domain verification origin is required");
+  }
+  if (
+    url.protocol !== "https:" ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    url.pathname !== "/"
+  )
+    throw configurationError("A valid domain verification origin is required");
+  return { origin: value.origin };
 }
 
 function validateHeaderValue(
