@@ -116,14 +116,23 @@ try {
       assert.deepEqual(Object.keys(client.websiteChannels), ['get']);
       assert.deepEqual(Object.keys(client.usage), ['get']);
       assert.deepEqual(Object.keys(client.agentCredentials), ['list', 'create', 'revoke']);
+      const domainCalls = [];
+      const domain = new Client({ baseUrl: 'https://api.example.test', token: async ({forceRefresh}) => { domainCalls.push('token:' + forceRefresh); return 'token'; }, fetch: async (input, init) => {
+        domainCalls.push(init.method + ':' + new URL(input).pathname);
+        return Response.json({error:{code:'AUTHENTICATION_REQUIRED',message:'safe'}}, {status:401});
+      }});
+      await assert.rejects(() => domain.domainVerifications.verify('tenant-1', 'verification-1'), error => error instanceof sdkError(domain) && error.status === 401);
+      await assert.rejects(() => domain.domainVerifications.revoke('tenant-1', 'verification-1'), error => error instanceof sdkError(domain) && error.status === 401);
+      assert.deepEqual(domainCalls, ['token:false','POST:/v1/tenants/tenant-1/domain-verifications/verification-1/verify','token:false','POST:/v1/tenants/tenant-1/domain-verifications/verification-1/revoke']);
     }
+    function sdkError(client) { return client.constructor === EsmClient ? esm.DaykeeperApiError : cjs.DaykeeperApiError; }
   `,
   );
   run(process.execPath, ["consumer.mjs"]);
   writeFileSync(
     path.join(directory, "consumer.mts"),
     `
-    import { DaykeeperClient, type AgentCredentialPage, type CreateAgentCredentialResult, type WebsiteInboxSpec, type WebsiteChannel, type EntitlementStatus, type UsageStatus, type UsageResourceStatus, type Operation } from '@skyporch/daykeeper';
+    import { DaykeeperClient, type AgentCredentialPage, type CreateAgentCredentialResult, type WebsiteInboxSpec, type WebsiteChannel, type EntitlementStatus, type UsageStatus, type UsageResourceStatus, type Operation, type DomainVerification, type DomainVerificationInput } from '@skyporch/daykeeper';
     const client = new DaykeeperClient({ baseUrl: 'https://example.test', token: 'test-token' });
     import { DaykeeperOnboardingClient, DaykeeperMachineSigner, type MachineChallenge } from '@skyporch/daykeeper';
     const onboarding = new DaykeeperOnboardingClient({baseUrl:'https://example.test'});
@@ -158,6 +167,12 @@ try {
     // @ts-expect-error Agent credentials cannot delegate credential administration.
     client.agentCredentials.create({name:'Overbroad',scopes:['daykeeper.credentials:write']},{idempotencyKey:'credential-create-0002'});
     void channel; void entitlements; void spec; void unsafe; void usage; void counter; void operation; void credentials; void created;
+    const domainInput: DomainVerificationInput = {origin:'https://example.test'};
+    const domain: Promise<DomainVerification> = client.domainVerifications.create('tenant', domainInput, {idempotencyKey:'domain-create-0001'});
+    const domainRead: Promise<DomainVerification> = client.domainVerifications.get('tenant', 'verification');
+    const domainVerify: Promise<DomainVerification> = client.domainVerifications.verify('tenant', 'verification');
+    const domainRevoke: Promise<DomainVerification> = client.domainVerifications.revoke('tenant', 'verification');
+    void domain; void domainRead; void domainVerify; void domainRevoke;
   `,
   );
   writeFileSync(
@@ -178,9 +193,10 @@ try {
     const channel: Promise<sdk.WebsiteChannel> = client.websiteChannels.get('tenant');
     const operation: Promise<sdk.Operation> = client.tenants.getProvisioningOperation('tenant');
     const usage: Promise<sdk.UsageStatus> = client.usage.get();
+    const domain: Promise<sdk.DomainVerification> = client.domainVerifications.get('tenant', 'verification');
     const agent = new sdk.DaykeeperClient({ baseUrl: 'https://example.test', apiKey: 'test-api-key' });
     const credentials: Promise<sdk.AgentCredentialPage> = client.agentCredentials.list();
-    void channel; void usage; void operation; void credentials;
+    void channel; void usage; void operation; void credentials; void domain;
   `,
   );
   run(process.execPath, [
