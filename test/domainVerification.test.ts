@@ -23,7 +23,13 @@ test("domain verification methods use the fixed contract and idempotency", async
       requests.push(request);
       return Response.json(
         { data: result },
-        { status: request.method === "GET" ? 200 : 201 },
+        {
+          status:
+            request.method === "POST" &&
+            new URL(request.url).pathname.endsWith("/domain-verifications")
+              ? 201
+              : 200,
+        },
       );
     },
   });
@@ -97,5 +103,33 @@ test("domain verification create validates origin and requires idempotency", asy
       {} as never,
     ),
   );
+  await assert.rejects(
+    () =>
+      client.domainVerifications.create(
+        "tenant-1",
+        { origin: "https://example.com" },
+        undefined as never,
+      ),
+    { code: "INVALID_CONFIGURATION" },
+  );
   assert.equal(calls, 0);
+});
+
+test("lost domain mutation responses are uncertain and never replayed", async () => {
+  for (const action of ["verify", "revoke"] as const) {
+    let calls = 0;
+    const client = new DaykeeperClient({
+      baseUrl: "https://api.example.com",
+      apiKey: "key",
+      fetch: async () => {
+        calls++;
+        throw new Error("Synthetic lost accepted response");
+      },
+    });
+    await assert.rejects(
+      () => client.domainVerifications[action]("tenant-1", "ver-1"),
+      { code: "NETWORK_ERROR", outcomeUnknown: true },
+    );
+    assert.equal(calls, 1);
+  }
 });
