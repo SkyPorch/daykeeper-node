@@ -19,6 +19,7 @@ import type {
   EntitlementStatus,
   UsageStatus,
   WebsiteChannel,
+  InboxChannel,
   EmailChannel,
   EmailChannelPlan,
   EmailChannelSpec,
@@ -54,6 +55,7 @@ const ALLOWED_PATHS: readonly RegExp[] = [
   "/v1/tenants:apply",
   `/v1/tenants/${SEGMENT}`,
   `/v1/tenants/${SEGMENT}/website-channel`,
+  `/v1/tenants/${SEGMENT}/inbox`,
   `/v1/tenants/${SEGMENT}/provisioning-operation`,
   `/v1/tenants/${SEGMENT}/email-channel-plans`,
   `/v1/tenants/${SEGMENT}/email-channel`,
@@ -160,6 +162,12 @@ export class DaykeeperClient {
       tenantId: string,
       options?: DaykeeperRequestOptions,
     ) => Promise<WebsiteChannel>;
+  };
+  readonly inboxes: {
+    get: (
+      tenantId: string,
+      options?: DaykeeperRequestOptions,
+    ) => Promise<InboxChannel>;
   };
   readonly tenants: {
     plan: (spec: TenantSpec) => Promise<TenantPlan>;
@@ -299,6 +307,12 @@ export class DaykeeperClient {
     this.websiteChannels = {
       get: (tenantId, requestOptions = {}) =>
         this.#request(`/v1/tenants/${pathSegment(tenantId)}/website-channel`, {
+          signal: requestOptions.signal,
+        }),
+    };
+    this.inboxes = {
+      get: (tenantId, requestOptions = {}) =>
+        this.#request(`/v1/tenants/${pathSegment(tenantId)}/inbox`, {
           signal: requestOptions.signal,
         }),
     };
@@ -484,6 +498,8 @@ export class DaykeeperClient {
                   : JSON.stringify(options.body),
               headers,
               method,
+              redirect: "error",
+              credentials: "omit",
               signal: lifetime.signal,
             });
           }, discardResponse);

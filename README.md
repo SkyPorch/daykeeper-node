@@ -66,12 +66,15 @@ const daykeeper = new DaykeeperClient({
   apiKey: signup.token,
 });
 const entitlements = await daykeeper.entitlements.get();
+if (!(await daykeeper.capabilities()).apiInboxes?.enabled) {
+  throw new Error("This installation does not support API inbox preparation");
+}
 // No human administrator name or email is required for a machine-owned inbox.
 const inboxPlan = await daykeeper.tenants.plan({
   name: "Acme Support",
   slug: "acme-support",
   locale: "en-US",
-  website: { websiteUrl: "https://example.com" },
+  inbox: { type: "api" },
 });
 // Save this intent ID and plan before applying. Replay with the same ID if lost.
 const inbox = await daykeeper.tenants.apply(
@@ -79,7 +82,7 @@ const inbox = await daykeeper.tenants.apply(
   { idempotencyKey: savedInboxIntentId },
 );
 const operation = await daykeeper.operations.get(inbox.operation.id);
-// Inspect websiteChannels.get(inbox.tenant.id) after provisioning succeeds.
+// Inspect inboxes.get(inbox.tenant.id) after provisioning succeeds.
 // A prepared inbox still does not mean customer traffic is enabled.
 ```
 
@@ -217,12 +220,18 @@ control-plane signing key.
 ## First-inbox preparation (unreleased 0.2.0)
 
 With a matching server, inspect `daykeeper.entitlements.get()` and
-`daykeeper.capabilities()` before planning a website inbox. The provisional
+`daykeeper.capabilities()` before planning an inbox. The provisional
 Free entitlement counts tenant admission only. Its legacy `metering` fields
 do not inspect optional provider enforcement. It is not a shipped self-serve
 free tier.
 
-When `capabilities.websiteInboxes?.enabled === true`, add
+When `capabilities.apiInboxes?.enabled === true`, add `inbox: { type: "api" }`
+to the tenant plan. This requires no customer website, DNS records or human
+administrator metadata. Apply with an idempotency key, observe the operation,
+then inspect `daykeeper.inboxes.get(tenantId)`. Do not include `website` and
+`inbox` together. The hosted URL is installation configuration, not SDK input.
+
+For a website inbox, when `capabilities.websiteInboxes?.enabled === true`, add
 `website: { websiteUrl: "https://example.com/" }` to the existing tenant plan.
 An absent capability means an older server does not support this option.
 Apply with an idempotency key, then inspect the returned operation and
@@ -324,6 +333,7 @@ it is not present in npm 0.1.0 and this source change does not enable it.
 - `entitlements.get`
 - `agentCredentials.list`, `agentCredentials.create`, `agentCredentials.revoke`
 - `websiteChannels.get`
+- `inboxes.get`
 - `tenants.plan`, `tenants.apply`, `tenants.list`, `tenants.get`
 - `tenants.getProvisioningOperation`
 - `emailChannels.plan`, `emailChannels.apply`, `emailChannels.get`

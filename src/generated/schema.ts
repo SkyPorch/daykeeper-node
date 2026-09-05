@@ -339,8 +339,31 @@ export interface paths {
          *     enabled: routing, identity checks, usage enforcement and installation
          *     verification must all pass before activation. This read never activates
          *     a channel, returns provider credentials, or creates another inbox.
+         *     API-only inboxes are served by /inbox and return 404 here.
          */
         get: operations["getWebsiteChannel"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tenants/{tenantId}/inbox": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Inspect the tenant's inbox
+         * @description Public inbox metadata without provider secrets. Preparation does not enable traffic; activation requires a separate boundary.
+         */
+        get: operations["getInbox"];
         put?: never;
         post?: never;
         delete?: never;
@@ -789,6 +812,12 @@ export interface components {
                 /** @description Whether self-serve traffic activation is implemented and enabled. Preparation alone is insufficient. */
                 trafficActivation: boolean;
             };
+            /** @description API-only inbox preparation capability. Traffic activation is not supported. */
+            apiInboxes?: {
+                enabled: boolean;
+                /** @constant */
+                trafficActivation: false;
+            };
             customerSessions: {
                 enabled: boolean;
             };
@@ -998,6 +1027,7 @@ export interface components {
             /** Format: email */
             supportEmail?: string;
             website?: components["schemas"]["WebsiteInboxSpec"];
+            inbox?: components["schemas"]["ApiInboxSpec"];
             /** @description Optional legacy contact metadata; it does not establish ownership or access. */
             administrator?: {
                 name: string;
@@ -1021,6 +1051,10 @@ export interface components {
             websiteUrl: string;
             allowedOrigins?: string[];
         };
+        ApiInboxSpec: {
+            /** @constant */
+            type: "api";
+        };
         WebsiteChannel: {
             /** Format: uuid */
             id: string;
@@ -1033,6 +1067,24 @@ export interface components {
              * @description Extensible observed state. Current values are provisioning, prepared, and degraded. Treat unknown states as not ready; always inspect trafficEnabled independently.
              * @example prepared
              */
+            state: string;
+            /** @description False until the complete activation boundary is implemented and verified. A succeeded provisioning operation alone does not make this true. */
+            trafficEnabled: boolean;
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        InboxChannel: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            organizationId: string;
+            /** Format: uuid */
+            tenantId: string;
+            spec: components["schemas"]["WebsiteInboxSpec"] | components["schemas"]["ApiInboxSpec"];
+            /** @description Extensible observed state; treat unknown states as not ready. */
             state: string;
             /** @description False until the complete activation boundary is implemented and verified. A succeeded provisioning operation alone does not make this true. */
             trafficEnabled: boolean;
@@ -1534,6 +1586,9 @@ export interface components {
         };
         WebsiteChannelResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["WebsiteChannel"];
+        };
+        InboxChannelResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["InboxChannel"];
         };
         DomainVerificationResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["DomainVerification"];
@@ -2155,6 +2210,32 @@ export interface operations {
             };
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getInbox: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Public inbox metadata without provider secrets. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboxChannelResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
             404: components["responses"]["Error"];
             default: components["responses"]["Error"];
         };

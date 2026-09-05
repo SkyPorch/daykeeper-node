@@ -2,6 +2,12 @@
 
 ## 0.2.0 (unreleased)
 
+- Add API-only inbox desired state (`inbox: { type: "api" }`) and
+  `inboxes.get(tenantId)`. Matching server capabilities are required. Preparation
+  does not activate customer traffic; no customer website or DNS setup is needed.
+- Management requests now reject redirects and omit cookies. Configure the final
+  API URL directly; a redirected write reports an uncertain outcome without retry.
+
 ### Breaking
 
 - The vendored management contract moves to 0.2.0 and breaks callers in two

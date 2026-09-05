@@ -2,11 +2,11 @@
 
 `daykeeper.yaml` is an exact, byte-for-byte copy of `openapi/daykeeper.yaml`
 from `SkyPorch/daykeeper-openapi`, commit
-`db938d7809edbd692f04150192e58787747247a4`
-(`codex/daykeeper-domain-verification-contract`, PR #18).
+`b571498fdb81471c12ba7c9ac3a4ceae1a4c7791`
+(`codex/daykeeper-api-inbox-sdk`, stacked on PR #18).
 
-- SHA-256: `210c0d3a8707d9a84875271c73d0ea76dd0db5f6a0d66adba9a758ccce93c6e1`
-- Git blob: `31276cfbd3ec4cc3f1158f69404c4ffc69e09f03`
+- SHA-256: `f2eaae1cc463e2b1bedd3a3ea40c86724e457f2f5be223744f6e37e74aca64d2`
+- Git blob: `ba0160f4557ea8ee89bbd258ec1e41c3f47209f0`
 - Tag status: unreleased commit snapshot; no new upstream tag is claimed.
 
 There is no local delta. This repository does not modify the vendored contract.
@@ -16,7 +16,7 @@ There is no local delta. This repository does not modify the vendored contract.
 The released baseline is tag `v1.0.0`, commit
 `35f5bd45fe0c6a6901766543bff90dae6838b965`. Provider-neutral wording came from
 PR #5, commit `fec6f9b88661fbfd04b7d7c66acce257f15ea6bd`. Relative to that
-baseline this snapshot carries five unreleased upstream changes:
+baseline this snapshot carries these unreleased upstream changes:
 
 1. Organization entitlement reads, optional website tenant settings, capability
    discovery, website preparation metadata, organization-only usage inspection
@@ -42,6 +42,9 @@ baseline this snapshot carries five unreleased upstream changes:
    Tenant administrator contact metadata is now optional; supplying it never
    establishes human ownership or grants provider access. Existing metadata is
    still validated and preserved.
+6. Bounded domain observation workflows and API-only inbox desired state,
+   generic inbox inspection and capability discovery. API and website inbox
+   settings are mutually exclusive; preparation does not activate traffic.
 
 ## Standing notes
 

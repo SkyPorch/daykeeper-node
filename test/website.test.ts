@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createServer } from "node:http";
+import { once } from "node:events";
 import {
   DaykeeperApiError,
   DaykeeperClient,
   DaykeeperTransportError,
   type DaykeeperCapabilities,
+  type InboxChannel,
   type WebsiteChannel,
   type WebsiteInboxSpec,
 } from "../src/index.ts";
@@ -23,6 +26,104 @@ const channel: WebsiteChannel = {
   createdAt: "2026-08-31T00:00:00.000Z",
   updatedAt: "2026-08-31T00:01:00.000Z",
 };
+
+test("API inbox reads use the dedicated path and preserve auth, encoding, and metadata", async () => {
+  const requests: Request[] = [];
+  const inbox: InboxChannel = {
+    ...channel,
+    spec: { type: "api" },
+    trafficEnabled: false,
+  };
+  const client = new DaykeeperClient({
+    baseUrl: "https://api.example.test/daykeeper-api",
+    apiKey: "machine-api-key",
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      requests.push(request);
+      return Response.json({ data: inbox });
+    },
+  });
+  assert.deepEqual(await client.inboxes.get("tenant/one"), inbox);
+  assert.equal(
+    requests[0]?.url,
+    "https://api.example.test/daykeeper-api/v1/tenants/tenant%2Fone/inbox",
+  );
+  assert.equal(requests[0]?.method, "GET");
+  assert.equal(
+    requests[0]?.headers.get("authorization"),
+    "Bearer machine-api-key",
+  );
+  assert.equal(await requests[0]?.text(), "");
+});
+
+test("API inbox planning sends only the requested API desired state", async () => {
+  const spec = {
+    name: "Support",
+    slug: "support",
+    locale: "en",
+    inbox: { type: "api" as const },
+  };
+  let calls = 0;
+  const client = new DaykeeperClient({
+    apiKey: "synthetic-key",
+    baseUrl: "https://api.example.test",
+    fetch: async (input, init) => {
+      calls++;
+      assert.equal(new URL(String(input)).pathname, "/v1/tenant-plans");
+      assert.equal(init?.method, "POST");
+      assert.equal(init?.redirect, "error");
+      assert.equal(init?.credentials, "omit");
+      assert.deepEqual(JSON.parse(String(init?.body)), spec);
+      return Response.json({ data: { id: "plan-1", spec } });
+    },
+  });
+  assert.deepEqual((await client.tenants.plan(spec)).spec, spec);
+  assert.equal(calls, 1);
+});
+
+test("management SDK refuses real redirects without forwarding a request to their target", async (t) => {
+  let targetCalls = 0;
+  let initialCalls = 0;
+  const server = createServer((request, response) => {
+    if (request.url === "/redirect-target") {
+      targetCalls++;
+      response.end(JSON.stringify({ data: {} }));
+      return;
+    }
+    initialCalls++;
+    response.writeHead(307, { location: "/redirect-target" });
+    response.end();
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(
+    () =>
+      new Promise<void>((resolve) => {
+        server.close(() => resolve());
+        server.closeAllConnections();
+      }),
+  );
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const client = new DaykeeperClient({
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    apiKey: "synthetic-key",
+  });
+  await assert.rejects(client.inboxes.get("tenant-1"), {
+    code: "NETWORK_ERROR",
+  });
+  await assert.rejects(
+    client.tenants.plan({
+      name: "Support",
+      slug: "support",
+      locale: "en",
+      inbox: { type: "api" },
+    }),
+    { code: "NETWORK_ERROR", outcomeUnknown: true },
+  );
+  assert.equal(initialCalls, 2);
+  assert.equal(targetCalls, 0);
+});
 
 test("website and entitlement reads preserve proxy prefixes, encode tenant paths, and never mutate", async () => {
   const requests: Request[] = [];
@@ -139,6 +240,7 @@ test("pre-aborted preparation reads never acquire credentials or dispatch", asyn
       client.websiteChannels.get(channel.tenantId, {
         signal: controller.signal,
       }),
+    () => client.inboxes.get(channel.tenantId, { signal: controller.signal }),
     () => client.entitlements.get({ signal: controller.signal }),
     () =>
       client.tenants.getProvisioningOperation(channel.tenantId, {

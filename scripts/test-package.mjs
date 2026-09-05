@@ -110,9 +110,11 @@ try {
       } });
       assert.equal((await client.entitlements.get()).state, 'unconfigured');
       assert.equal((await client.websiteChannels.get('tenant/one')).trafficEnabled, false);
+      assert.equal((await client.inboxes.get('tenant/one')).trafficEnabled, false);
       assert.equal((await client.usage.get()).writeAdmission, 'not_evaluated');
       assert.equal((await client.tenants.getProvisioningOperation('tenant/one')).id, 'operation-id');
-      assert.deepEqual(paths, ['/v1/entitlements', '/v1/tenants/tenant%2Fone/website-channel', '/v1/usage', '/v1/tenants/tenant%2Fone/provisioning-operation']);
+      assert.deepEqual(paths, ['/v1/entitlements', '/v1/tenants/tenant%2Fone/website-channel', '/v1/tenants/tenant%2Fone/inbox', '/v1/usage', '/v1/tenants/tenant%2Fone/provisioning-operation']);
+      assert.deepEqual(Object.keys(client.inboxes), ['get']);
       assert.deepEqual(Object.keys(client.websiteChannels), ['get']);
       assert.deepEqual(Object.keys(client.usage), ['get']);
       assert.deepEqual(Object.keys(client.agentCredentials), ['list', 'create', 'revoke']);
