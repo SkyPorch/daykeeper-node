@@ -24,6 +24,8 @@ export type CreateAgentCredentialResult =
   Schemas["CreateAgentCredentialResult"];
 export type RevokeAgentCredentialResult =
   Schemas["RevokeAgentCredentialResult"];
+export type DomainVerification = Schemas["DomainVerification"];
+export type DomainVerificationInput = Schemas["DomainVerificationInput"];
 export type MachinePublicKey = Schemas["MachinePublicKey"];
 export type MachineEnrollmentInput = Schemas["MachineEnrollmentInput"];
 export type MachineChallenge = Schemas["MachineChallenge"];

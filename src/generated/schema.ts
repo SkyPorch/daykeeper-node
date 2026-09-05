@@ -349,6 +349,104 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/tenants/{tenantId}/domain-verifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create or replay a tenant domain verification
+         * @description Persists a DNS TXT observation challenge for the exact HTTPS origin.
+         *     This is durable verification evidence only; it never enables customer
+         *     traffic. Exact retries with the same Idempotency-Key return the
+         *     original challenge and DNS value without generating a new nonce.
+         *     Machine-owner principals are required; human and delegated tokens are
+         *     not supported. All responses, including errors, are not cacheable.
+         */
+        post: operations["createDomainVerification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tenants/{tenantId}/domain-verifications/{verificationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+                verificationId: components["parameters"]["DomainVerificationId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read a tenant domain verification
+         * @description Read durable DNS evidence without activating traffic. Requires an opaque machine-owner credential; human and delegated tokens are unsupported.
+         */
+        get: operations["getDomainVerification"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tenants/{tenantId}/domain-verifications/{verificationId}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+                verificationId: components["parameters"]["DomainVerificationId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify a tenant domain through DNS
+         * @description Re-observes the public TXT record and commits a short-lived proof
+         *     receipt. Verification does not activate customer traffic. Machine-owner
+         *     principals are required and all responses are not cacheable.
+         */
+        post: operations["verifyDomainVerification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tenants/{tenantId}/domain-verifications/{verificationId}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+                verificationId: components["parameters"]["DomainVerificationId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke a tenant domain verification
+         * @description Revoke durable evidence without changing traffic activation. Requires an opaque machine-owner credential; human and delegated tokens are unsupported.
+         */
+        post: operations["revokeDomainVerification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/tenants/{tenantId}/provisioning-operation": {
         parameters: {
             query?: never;
@@ -694,6 +792,14 @@ export interface components {
             customerSessions: {
                 enabled: boolean;
             };
+            /** @description Optional on older servers. DNS evidence does not activate traffic. */
+            domainVerifications?: {
+                enabled: boolean;
+                /** @constant */
+                authentication: "machine_owner";
+                /** @constant */
+                trafficActivation: false;
+            };
             /** @description Optional on older servers. Inspection support does not imply scope, an assigned allowance, or traffic readiness. */
             usage?: {
                 /** @constant */
@@ -856,6 +962,33 @@ export interface components {
             writeAdmission: "not_evaluated";
             /** @description Recovery hints for people and agents; never automatic authority to mutate policy. */
             nextActions: string[];
+        };
+        DomainVerificationInput: {
+            /** @description Exact canonical HTTPS origin; no path, query, fragment, wildcard, credentials, or IP literal. */
+            origin: string;
+        };
+        EmptyObject: Record<string, never>;
+        DomainVerificationDns: {
+            /** @constant */
+            type: "TXT";
+            name: string;
+            value: string;
+        };
+        DomainVerification: {
+            /** Format: uuid */
+            challengeId: string;
+            /** Format: uuid */
+            tenantId: string;
+            origin: string;
+            /** @enum {string} */
+            state: "pending" | "verified" | "expired" | "revoked";
+            dns: components["schemas"]["DomainVerificationDns"];
+            /** Format: int64 */
+            expiresAt: number;
+            /** Format: int64 */
+            verifiedAt: number | null;
+            /** Format: int64 */
+            revokedAt: number | null;
         };
         TenantSpec: {
             name: string;
@@ -1402,6 +1535,9 @@ export interface components {
         WebsiteChannelResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["WebsiteChannel"];
         };
+        DomainVerificationResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["DomainVerification"];
+        };
         EmailChannelPlanResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["EmailChannelPlan"];
         };
@@ -1459,6 +1595,40 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
+        /** @description Domain verification error; never cache this response. */
+        DomainError: {
+            headers: {
+                "Cache-Control"?: "no-store";
+                "X-Request-Id"?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description Domain verification request rejected; never cache this response. */
+        DomainRequestError: {
+            headers: {
+                "Cache-Control"?: "no-store";
+                "X-Request-Id"?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description Domain verification request rate limited; retry only as directed. */
+        DomainRateLimited: {
+            headers: {
+                "Cache-Control"?: "no-store";
+                "Retry-After"?: number;
+                "X-Request-Id"?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
     };
     parameters: {
         /**
@@ -1477,6 +1647,7 @@ export interface components {
         FlowId: string;
         FlowVersionNumber: number;
         AgentCredentialId: string;
+        DomainVerificationId: string;
     };
     requestBodies: never;
     headers: never;
@@ -1986,6 +2157,153 @@ export interface operations {
             403: components["responses"]["Error"];
             404: components["responses"]["Error"];
             default: components["responses"]["Error"];
+        };
+    };
+    createDomainVerification: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description A caller-generated key reused only for an exact logical mutation. The
+                 *     key is bound to the request the first time it is applied. Repeating that
+                 *     exact request with the same key returns the stored original result
+                 *     instead of writing again, and the operation reports the repeat as a
+                 *     replay. Reusing the key for a different request is rejected and no write
+                 *     is applied. A missing or malformed key is rejected with INVALID_INPUT
+                 *     (400). Use the same key to reconcile a request whose outcome is unknown;
+                 *     do not retry an uncertain mutation under a new key.
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DomainVerificationInput"];
+            };
+        };
+        responses: {
+            /** @description A new or exact-replayed domain verification challenge. */
+            201: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DomainVerificationResponse"];
+                };
+            };
+            400: components["responses"]["DomainError"];
+            401: components["responses"]["DomainError"];
+            403: components["responses"]["DomainError"];
+            404: components["responses"]["DomainError"];
+            409: components["responses"]["DomainError"];
+            413: components["responses"]["DomainRequestError"];
+            415: components["responses"]["DomainRequestError"];
+            429: components["responses"]["DomainRateLimited"];
+            503: components["responses"]["DomainError"];
+        };
+    };
+    getDomainVerification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+                verificationId: components["parameters"]["DomainVerificationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Domain verification evidence. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DomainVerificationResponse"];
+                };
+            };
+            401: components["responses"]["DomainError"];
+            403: components["responses"]["DomainError"];
+            404: components["responses"]["DomainError"];
+            429: components["responses"]["DomainRateLimited"];
+        };
+    };
+    verifyDomainVerification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+                verificationId: components["parameters"]["DomainVerificationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmptyObject"];
+            };
+        };
+        responses: {
+            /** @description Updated or already verified domain evidence. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DomainVerificationResponse"];
+                };
+            };
+            400: components["responses"]["DomainError"];
+            401: components["responses"]["DomainError"];
+            403: components["responses"]["DomainError"];
+            404: components["responses"]["DomainError"];
+            409: components["responses"]["DomainError"];
+            413: components["responses"]["DomainRequestError"];
+            415: components["responses"]["DomainRequestError"];
+            429: components["responses"]["DomainRateLimited"];
+            503: components["responses"]["DomainError"];
+        };
+    };
+    revokeDomainVerification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+                verificationId: components["parameters"]["DomainVerificationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmptyObject"];
+            };
+        };
+        responses: {
+            /** @description Revoked domain evidence. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DomainVerificationResponse"];
+                };
+            };
+            401: components["responses"]["DomainError"];
+            403: components["responses"]["DomainError"];
+            404: components["responses"]["DomainError"];
+            413: components["responses"]["DomainRequestError"];
+            415: components["responses"]["DomainRequestError"];
+            429: components["responses"]["DomainRateLimited"];
         };
     };
     getTenantProvisioningOperation: {

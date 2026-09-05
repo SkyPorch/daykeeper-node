@@ -2,13 +2,11 @@
 
 `daykeeper.yaml` is an exact, byte-for-byte copy of `openapi/daykeeper.yaml`
 from `SkyPorch/daykeeper-openapi`, commit
-`8c4badfa3dac3e09431f1db3923e566d3d9f2942`
-(`codex/daykeeper-optional-admin-metadata`, stacked on PR #16,
-`codex/daykeeper-machine-onboarding-contract`, commit
-`7d461325c7abffb190f597bd58c8cda0cb596487`).
+`092401825322ed0105a55a57181f8489541c87bc`
+(`codex/daykeeper-domain-verification-contract`, stacked on PR #18 and SDK PR #16).
 
-- SHA-256: `f771b9566088a54459dc6654f470d41c8575719110f3b0f466c377c682aaab93`
-- Git blob: `9bdefb37d51ff65a7eae95befaf4a7f124225934`
+- SHA-256: `0a0659ee246e5071a1a1b62a1ef53c27caf6daa55117af7bbc2e37c3a049eeba`
+- Git blob: `a9b14e8d9bef33edf5ab72cd0a992c88e5617edd`
 - Tag status: unreleased commit snapshot; no new upstream tag is claimed.
 
 There is no local delta. This repository does not modify the vendored contract.

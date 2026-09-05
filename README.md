@@ -100,6 +100,12 @@ credential ID without changing it. Create a new explicit rotation intent using
 that ID to obtain a replacement token. Do not automatically rotate on a timeout:
 another process may already be using the successor.
 
+Machine-owner domain verification is available through
+`daykeeper.domainVerifications`. Call `create(tenantId, { origin }, { idempotencyKey })`
+to receive the DNS TXT record, then use `get`, `verify`, or `revoke` with its
+verification ID. This machine-owner-only receipt workflow does not activate
+customer traffic. Check `capabilities().domainVerifications?.enabled` first.
+
 Use the management API below to plan and provision an inbox after signup.
 Preparation does not enable customer traffic; readiness and route activation
 remain separate operator-controlled gates.
