@@ -109,6 +109,13 @@ to receive the DNS TXT record, then use `get`, `verify`, or `revoke` with its
 verification ID. This machine-owner-only receipt workflow does not activate
 customer traffic. Check `capabilities().domainVerifications?.enabled` first.
 
+Machine-owner API inbox activation is available through
+`daykeeper.inboxActivations`. Call `create(tenantId, { idempotencyKey })`, then
+use `get(tenantId, intent)` or `revoke(tenantId, intent)`. Activation does not
+require DNS or a human verification step. An `active` receipt records the
+activation intent, but is not a live-readiness guarantee; use
+`daykeeper.inboxes.get(tenantId)` to inspect current inbox readiness.
+
 Use the management API below to plan and provision an inbox after signup.
 Preparation does not enable customer traffic; readiness and route activation
 remain separate operator-controlled gates.

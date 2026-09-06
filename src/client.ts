@@ -35,6 +35,7 @@ import type {
   TenantSpec,
   DomainVerification,
   DomainVerificationInput,
+  ApiInboxActivationReceipt,
 } from "./types.js";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -64,6 +65,9 @@ const ALLOWED_PATHS: readonly RegExp[] = [
   `/v1/tenants/${SEGMENT}/domain-verifications/${SEGMENT}`,
   `/v1/tenants/${SEGMENT}/domain-verifications/${SEGMENT}/verify`,
   `/v1/tenants/${SEGMENT}/domain-verifications/${SEGMENT}/revoke`,
+  `/v1/tenants/${SEGMENT}/inbox-activations`,
+  `/v1/tenants/${SEGMENT}/inbox-activations/${SEGMENT}`,
+  `/v1/tenants/${SEGMENT}/inbox-activations/${SEGMENT}/revoke`,
   `/v1/tenants/${SEGMENT}/flows`,
   "/v1/email-channels:apply",
   `/v1/operations/${SEGMENT}`,
@@ -221,6 +225,22 @@ export class DaykeeperClient {
       verificationId: string,
       options?: DaykeeperRequestOptions,
     ) => Promise<DomainVerification>;
+  };
+  readonly inboxActivations: {
+    create: (
+      tenantId: string,
+      options: DaykeeperIdempotencyOptions,
+    ) => Promise<ApiInboxActivationReceipt>;
+    get: (
+      tenantId: string,
+      intent: string,
+      options?: DaykeeperRequestOptions,
+    ) => Promise<ApiInboxActivationReceipt>;
+    revoke: (
+      tenantId: string,
+      intent: string,
+      options?: DaykeeperRequestOptions,
+    ) => Promise<ApiInboxActivationReceipt>;
   };
   readonly operations: {
     get: (operationId: string) => Promise<Operation>;
@@ -391,6 +411,29 @@ export class DaykeeperClient {
       revoke: (tenantId, verificationId, requestOptions = {}) =>
         this.#request(
           `/v1/tenants/${pathSegment(tenantId)}/domain-verifications/${pathSegment(verificationId)}/revoke`,
+          { method: "POST", body: {}, signal: requestOptions.signal },
+        ),
+    };
+    this.inboxActivations = {
+      create: (tenantId, requestOptions) =>
+        this.#request(
+          `/v1/tenants/${pathSegment(tenantId)}/inbox-activations`,
+          {
+            method: "POST",
+            body: {},
+            idempotencyKey: requestOptions.idempotencyKey,
+            requireIdempotencyKey: true,
+            signal: requestOptions.signal,
+          },
+        ),
+      get: (tenantId, activationIntent, requestOptions = {}) =>
+        this.#request(
+          `/v1/tenants/${pathSegment(tenantId)}/inbox-activations/${pathSegment(validateActivationIntent(activationIntent))}`,
+          { signal: requestOptions.signal },
+        ),
+      revoke: (tenantId, activationIntent, requestOptions = {}) =>
+        this.#request(
+          `/v1/tenants/${pathSegment(tenantId)}/inbox-activations/${pathSegment(validateActivationIntent(activationIntent))}/revoke`,
           { method: "POST", body: {}, signal: requestOptions.signal },
         ),
     };
@@ -673,6 +716,12 @@ function pathSegment(value: string): string {
     throw configurationError("Resource identifiers cannot traverse the path");
   }
   return encodeURIComponent(value);
+}
+
+function validateActivationIntent(value: string): string {
+  if (typeof value !== "string" || !/^[A-Za-z0-9._:-]{16,128}$/.test(value))
+    throw configurationError("The activation intent is invalid");
+  return value;
 }
 
 function positiveInteger(value: number): number {

@@ -63,6 +63,9 @@ export type CustomerSessionPurpose =
 export type CreateCustomerSessionInput = Schemas["CreateCustomerSessionInput"];
 export type CustomerSession = Schemas["CustomerSession"];
 
+export type ApiInboxActivationReceipt = Schemas["ApiInboxActivation"];
+export type ApiInboxActivationState = ApiInboxActivationReceipt["state"];
+
 export const DAYKEEPER_FLOW_SCHEMA_VERSION = "2026-08-01" as const;
 
 export type FlowCondition = Schemas["FlowCondition"];

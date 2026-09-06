@@ -27,7 +27,7 @@
     "format:check": "prettier --check .",
     "generate": "openapi-typescript openapi/daykeeper.yaml --output src/generated/schema.ts",
     "pack:check": "npm pack --dry-run --json && node scripts/verify-pack.mjs",
-    "test": "tsx --test test/client.test.ts test/requestLifetime.test.ts test/website.test.ts test/usage.test.ts test/flowIdempotency.test.ts test/onboardingClient.test.ts test/machineSigner.test.ts test/domainVerification.test.ts",
+    "test": "tsx --test test/client.test.ts test/requestLifetime.test.ts test/website.test.ts test/usage.test.ts test/flowIdempotency.test.ts test/onboardingClient.test.ts test/machineSigner.test.ts test/domainVerification.test.ts test/inboxActivation.test.ts",
     "test:package": "node scripts/test-package.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "prepublishOnly": "node scripts/verify-release.mjs",

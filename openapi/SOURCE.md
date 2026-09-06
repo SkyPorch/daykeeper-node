@@ -2,11 +2,11 @@
 
 `daykeeper.yaml` is an exact, byte-for-byte copy of `openapi/daykeeper.yaml`
 from `SkyPorch/daykeeper-openapi`, commit
-`b571498fdb81471c12ba7c9ac3a4ceae1a4c7791`
-(`codex/daykeeper-api-inbox-sdk`, stacked on PR #18).
+`226862442ce95447c813168b9c1d0f962a1a961d`
+(`codex/daykeeper-api-activation-contract`, stacked on PR #19).
 
-- SHA-256: `f2eaae1cc463e2b1bedd3a3ea40c86724e457f2f5be223744f6e37e74aca64d2`
-- Git blob: `ba0160f4557ea8ee89bbd258ec1e41c3f47209f0`
+- SHA-256: `9523cde130beabde72367bb6c1befdf143a04812e6dd5cd68fea6c335f332b6d`
+- Git blob: `12d73b73478d4370384aa68405e0f7634c9f12ee`
 - Tag status: unreleased commit snapshot; no new upstream tag is claimed.
 
 There is no local delta. This repository does not modify the vendored contract.
@@ -45,14 +45,17 @@ baseline this snapshot carries these unreleased upstream changes:
 6. Bounded domain observation workflows and API-only inbox desired state,
    generic inbox inspection and capability discovery. API and website inbox
    settings are mutually exclusive; preparation does not activate traffic.
+7. Machine-owner API inbox activation, retained receipt inspection and revocation.
+   Public receipts omit installation identity and database role metadata. Optional
+   activation capability does not imply a deployed or currently ready tenant.
 
 ## Standing notes
 
 This snapshot retains Apache-2.0 license metadata. The OAuth metadata declares
 billing and credential-management scopes; it does not grant those scopes to
 anyone. Resource counters are not billable outcomes or permission to write. The
-snapshot adds no activation or billing mutation. Static credentials remain
-secondary to hosted OAuth. The new SDK methods need the corresponding reviewed
+snapshot adds opt-in activation but no billing mutation. Machine-owner credentials
+are required for activation. The new SDK methods need the corresponding reviewed
 server version; older servers remain compatible with existing account-only
 methods.
 

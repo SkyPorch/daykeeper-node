@@ -399,6 +399,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/tenants/{tenantId}/inbox-activations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Activate or replay a tenant API inbox
+         * @description Activates the already prepared API inbox for customer traffic and
+         *     returns a durable receipt. This operation accepts no customer
+         *     configuration and requires a machine-owner credential with
+         *     daykeeper.accounts:write. Exact retries with the same Idempotency-Key
+         *     return the original receipt with replayed set to true. If the write outcome is uncertain, reconcile with
+         *     GET /v1/tenants/{tenantId}/inbox-activations/{intent}; do not retry
+         *     automatically. All responses, including errors, are not cacheable.
+         */
+        post: operations["activateApiInbox"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tenants/{tenantId}/inbox-activations/{intent}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+                intent: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Read a tenant API inbox activation receipt
+         * @description Read the durable activation receipt without asserting current traffic readiness. Requires a machine-owner credential with daykeeper.accounts:read. All responses, including errors, are not cacheable.
+         */
+        get: operations["getApiInboxActivation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tenants/{tenantId}/inbox-activations/{intent}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+                intent: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke a tenant API inbox activation
+         * @description Revoke the durable activation receipt and disable its activation state. Requires a machine-owner credential with daykeeper.accounts:write; it accepts no customer configuration. All responses, including errors, are not cacheable.
+         */
+        post: operations["revokeApiInboxActivation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/tenants/{tenantId}/domain-verifications/{verificationId}": {
         parameters: {
             query?: never;
@@ -812,11 +886,10 @@ export interface components {
                 /** @description Whether self-serve traffic activation is implemented and enabled. Preparation alone is insufficient. */
                 trafficActivation: boolean;
             };
-            /** @description API-only inbox preparation capability. Traffic activation is not supported. */
+            /** @description API-only inbox preparation and optional traffic activation capability. */
             apiInboxes?: {
                 enabled: boolean;
-                /** @constant */
-                trafficActivation: false;
+                trafficActivation: boolean;
             };
             customerSessions: {
                 enabled: boolean;
@@ -997,6 +1070,22 @@ export interface components {
             origin: string;
         };
         EmptyObject: Record<string, never>;
+        ApiInboxActivation: {
+            /** Format: uuid */
+            activationId: string;
+            /** Format: uuid */
+            tenantId: string;
+            /** Format: uuid */
+            channelId: string;
+            intent: string;
+            /** @enum {string} */
+            state: "active" | "revoked";
+            /** Format: int64 */
+            createdAt: number;
+            /** Format: int64 */
+            revokedAt: number | null;
+            replayed: boolean;
+        };
         DomainVerificationDns: {
             /** @constant */
             type: "TXT";
@@ -1593,6 +1682,9 @@ export interface components {
         DomainVerificationResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["DomainVerification"];
         };
+        ApiInboxActivationResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["ApiInboxActivation"];
+        };
         EmailChannelPlanResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["EmailChannelPlan"];
         };
@@ -1674,6 +1766,40 @@ export interface components {
         };
         /** @description Domain verification request rate limited; retry only as directed. */
         DomainRateLimited: {
+            headers: {
+                "Cache-Control"?: "no-store";
+                "Retry-After"?: number;
+                "X-Request-Id"?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description API inbox activation error; never cache this response. */
+        ApiInboxActivationError: {
+            headers: {
+                "Cache-Control"?: "no-store";
+                "X-Request-Id"?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description API inbox activation request rejected; never cache this response. */
+        ApiInboxActivationRequestError: {
+            headers: {
+                "Cache-Control"?: "no-store";
+                "X-Request-Id"?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description API inbox activation is bounded; do not retry uncertain writes automatically. */
+        ApiInboxActivationRateLimited: {
             headers: {
                 "Cache-Control"?: "no-store";
                 "Retry-After"?: number;
@@ -2286,6 +2412,121 @@ export interface operations {
             415: components["responses"]["DomainRequestError"];
             429: components["responses"]["DomainRateLimited"];
             503: components["responses"]["DomainError"];
+        };
+    };
+    activateApiInbox: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description A caller-generated key reused only for an exact logical mutation. The
+                 *     key is bound to the request the first time it is applied. Repeating that
+                 *     exact request with the same key returns the stored original result
+                 *     instead of writing again, and the operation reports the repeat as a
+                 *     replay. Reusing the key for a different request is rejected and no write
+                 *     is applied. A missing or malformed key is rejected with INVALID_INPUT
+                 *     (400). Use the same key to reconcile a request whose outcome is unknown;
+                 *     do not retry an uncertain mutation under a new key.
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmptyObject"];
+            };
+        };
+        responses: {
+            /** @description A new or exact-replayed API inbox activation receipt. */
+            201: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiInboxActivationResponse"];
+                };
+            };
+            400: components["responses"]["ApiInboxActivationError"];
+            401: components["responses"]["ApiInboxActivationError"];
+            403: components["responses"]["ApiInboxActivationError"];
+            404: components["responses"]["ApiInboxActivationError"];
+            409: components["responses"]["ApiInboxActivationError"];
+            413: components["responses"]["ApiInboxActivationRequestError"];
+            415: components["responses"]["ApiInboxActivationRequestError"];
+            429: components["responses"]["ApiInboxActivationRateLimited"];
+            503: components["responses"]["ApiInboxActivationError"];
+        };
+    };
+    getApiInboxActivation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+                intent: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The durable API inbox activation receipt. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiInboxActivationResponse"];
+                };
+            };
+            400: components["responses"]["ApiInboxActivationError"];
+            401: components["responses"]["ApiInboxActivationError"];
+            403: components["responses"]["ApiInboxActivationError"];
+            404: components["responses"]["ApiInboxActivationError"];
+            429: components["responses"]["ApiInboxActivationRateLimited"];
+            503: components["responses"]["ApiInboxActivationError"];
+        };
+    };
+    revokeApiInboxActivation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+                intent: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmptyObject"];
+            };
+        };
+        responses: {
+            /** @description The revoked API inbox activation receipt. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiInboxActivationResponse"];
+                };
+            };
+            400: components["responses"]["ApiInboxActivationError"];
+            401: components["responses"]["ApiInboxActivationError"];
+            403: components["responses"]["ApiInboxActivationError"];
+            404: components["responses"]["ApiInboxActivationError"];
+            409: components["responses"]["ApiInboxActivationError"];
+            413: components["responses"]["ApiInboxActivationRequestError"];
+            415: components["responses"]["ApiInboxActivationRequestError"];
+            429: components["responses"]["ApiInboxActivationRateLimited"];
+            503: components["responses"]["ApiInboxActivationError"];
         };
     };
     getDomainVerification: {
