@@ -915,6 +915,7 @@ function apiError(response: Response, payload: unknown): DaykeeperApiError {
       boundedString(body.correlationId, MAX_CORRELATION_ID_LENGTH) ??
       safeCorrelationId(response.headers.get("x-request-id")),
     fields: stringArray(body.fields),
+    outcomeUnknown: body.outcomeUnknown === true,
   });
 }
 

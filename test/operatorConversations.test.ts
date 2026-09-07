@@ -98,6 +98,35 @@ test("operator replies never retry an uncertain POST", async () => {
   assert.equal(calls, 1);
 });
 
+test("operator reply preserves a server-marked unknown outcome", async () => {
+  const client = new DaykeeperClient({
+    baseUrl: "https://api.example.com",
+    apiKey: "operator-key",
+    fetch: async () =>
+      Response.json(
+        {
+          error: {
+            code: "OPERATOR_UNAVAILABLE",
+            message: "The reply outcome is unknown",
+            retryable: true,
+            outcomeUnknown: true,
+            nextActions: ["inspect_messages"],
+            correlationId: "reply-123",
+          },
+        },
+        { status: 500 },
+      ),
+  });
+  await assert.rejects(
+    () => client.operatorConversations.reply("tenant-1", 42, "Reply"),
+    (error: unknown) => {
+      assert.equal((error as { outcomeUnknown: boolean }).outcomeUnknown, true);
+      assert.equal((error as { retryable: boolean }).retryable, false);
+      return true;
+    },
+  );
+});
+
 test("operator conversation inputs fail before transport", async () => {
   let calls = 0;
   const client = new DaykeeperClient({
