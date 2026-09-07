@@ -66,6 +66,41 @@ export type CustomerSession = Schemas["CustomerSession"];
 export type ApiInboxActivationReceipt = Schemas["ApiInboxActivation"];
 export type ApiInboxActivationState = ApiInboxActivationReceipt["state"];
 
+export interface OperatorConversation {
+  id: number;
+  status: string;
+  preview: string;
+  createdAt?: string;
+  updatedAt?: string;
+  lastActivityAt?: string;
+}
+
+export interface OperatorMessage {
+  id: number;
+  conversationId: number;
+  senderType: string;
+  messageType: number;
+  content: string;
+  createdAt: string;
+}
+
+export interface OperatorConversationList {
+  tenantId: string;
+  conversations: readonly OperatorConversation[];
+}
+
+export interface OperatorConversationMessages {
+  tenantId: string;
+  conversationId: number;
+  messages: readonly OperatorMessage[];
+}
+
+export interface OperatorConversationReply {
+  tenantId: string;
+  conversationId: number;
+  message: OperatorMessage;
+}
+
 export const DAYKEEPER_FLOW_SCHEMA_VERSION = "2026-08-01" as const;
 
 export type FlowCondition = Schemas["FlowCondition"];

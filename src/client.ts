@@ -36,6 +36,9 @@ import type {
   DomainVerification,
   DomainVerificationInput,
   ApiInboxActivationReceipt,
+  OperatorConversationList,
+  OperatorConversationMessages,
+  OperatorConversationReply,
 } from "./types.js";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -68,6 +71,8 @@ const ALLOWED_PATHS: readonly RegExp[] = [
   `/v1/tenants/${SEGMENT}/inbox-activations`,
   `/v1/tenants/${SEGMENT}/inbox-activations/${SEGMENT}`,
   `/v1/tenants/${SEGMENT}/inbox-activations/${SEGMENT}/revoke`,
+  `/v1/tenants/${SEGMENT}/conversations`,
+  `/v1/tenants/${SEGMENT}/conversations/[1-9][0-9]*/messages`,
   `/v1/tenants/${SEGMENT}/flows`,
   "/v1/email-channels:apply",
   `/v1/operations/${SEGMENT}`,
@@ -241,6 +246,23 @@ export class DaykeeperClient {
       intent: string,
       options?: DaykeeperRequestOptions,
     ) => Promise<ApiInboxActivationReceipt>;
+  };
+  readonly operatorConversations: {
+    list: (
+      tenantId: string,
+      options?: DaykeeperRequestOptions,
+    ) => Promise<OperatorConversationList>;
+    messages: (
+      tenantId: string,
+      conversationId: number,
+      options?: DaykeeperRequestOptions,
+    ) => Promise<OperatorConversationMessages>;
+    reply: (
+      tenantId: string,
+      conversationId: number,
+      content: string,
+      options?: DaykeeperRequestOptions,
+    ) => Promise<OperatorConversationReply>;
   };
   readonly operations: {
     get: (operationId: string) => Promise<Operation>;
@@ -435,6 +457,26 @@ export class DaykeeperClient {
         this.#request(
           `/v1/tenants/${pathSegment(tenantId)}/inbox-activations/${pathSegment(validateActivationIntent(activationIntent))}/revoke`,
           { method: "POST", body: {}, signal: requestOptions.signal },
+        ),
+    };
+    this.operatorConversations = {
+      list: (tenantId, requestOptions = {}) =>
+        this.#request(`/v1/tenants/${pathSegment(tenantId)}/conversations`, {
+          signal: requestOptions.signal,
+        }),
+      messages: async (tenantId, conversationId, requestOptions = {}) =>
+        this.#request(
+          `/v1/tenants/${pathSegment(tenantId)}/conversations/${positiveSafeInteger(conversationId)}/messages`,
+          { signal: requestOptions.signal },
+        ),
+      reply: async (tenantId, conversationId, content, requestOptions = {}) =>
+        this.#request(
+          `/v1/tenants/${pathSegment(tenantId)}/conversations/${positiveSafeInteger(conversationId)}/messages`,
+          {
+            method: "POST",
+            body: { content: validateOperatorContent(content) },
+            signal: requestOptions.signal,
+          },
         ),
     };
     this.operations = {
@@ -716,6 +758,22 @@ function pathSegment(value: string): string {
     throw configurationError("Resource identifiers cannot traverse the path");
   }
   return encodeURIComponent(value);
+}
+
+function positiveSafeInteger(value: number): number {
+  if (!Number.isSafeInteger(value) || value <= 0)
+    throw configurationError(
+      "Conversation identifiers must be positive safe integers",
+    );
+  return value;
+}
+
+function validateOperatorContent(value: string): string {
+  if (typeof value !== "string" || !value.trim() || value.length > 4_000)
+    throw configurationError(
+      "Operator replies must contain 1 through 4000 characters",
+    );
+  return value.trim();
 }
 
 function validateActivationIntent(value: string): string {
