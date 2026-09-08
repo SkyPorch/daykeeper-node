@@ -1,13 +1,12 @@
 # Contract source
 
 `daykeeper.yaml` is an exact, byte-for-byte copy of `openapi/daykeeper.yaml`
-from `SkyPorch/daykeeper-openapi`, commit
-`226862442ce95447c813168b9c1d0f962a1a961d`
-(`codex/daykeeper-api-activation-contract`, stacked on PR #19).
+from `SkyPorch/daykeeper-openapi`, tag `v1.1.0`, commit
+`c9a0175d0053f1a2d57c9329f6d3a36ec6acdb71`.
 
-- SHA-256: `9523cde130beabde72367bb6c1befdf143a04812e6dd5cd68fea6c335f332b6d`
-- Git blob: `12d73b73478d4370384aa68405e0f7634c9f12ee`
-- Tag status: unreleased commit snapshot; no new upstream tag is claimed.
+- SHA-256: `26230df75f0faf7f4a6625597a9acde4c36229ed570a8ff6f0d56f83a1939f65`
+- Git blob: `38ea135713b1a27cb5d9069dd7a83d88f39f43fc`
+- Tag status: immutable upstream release tag.
 
 There is no local delta. This repository does not modify the vendored contract.
 
@@ -16,7 +15,7 @@ There is no local delta. This repository does not modify the vendored contract.
 The released baseline is tag `v1.0.0`, commit
 `35f5bd45fe0c6a6901766543bff90dae6838b965`. Provider-neutral wording came from
 PR #5, commit `fec6f9b88661fbfd04b7d7c66acce257f15ea6bd`. Relative to that
-baseline this snapshot carries these unreleased upstream changes:
+baseline this snapshot carries these upstream changes:
 
 1. Organization entitlement reads, optional website tenant settings, capability
    discovery, website preparation metadata, organization-only usage inspection
@@ -59,8 +58,6 @@ are required for activation. The new SDK methods need the corresponding reviewed
 server version; older servers remain compatible with existing account-only
 methods.
 
-These upstream pull requests are unmerged. Release provenance must record an
-immutable `daykeeper-openapi` tag and its full commit SHA. Before release,
-update this snapshot record to that reviewed tag and verify the contract
-checksum above. CI regenerates TypeScript declarations and fails when the
+Release provenance records the immutable `daykeeper-openapi` tag and full
+commit SHA above. CI regenerates TypeScript declarations and fails when the
 committed output differs.

@@ -646,6 +646,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/tenants/{tenantId}/conversations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List support conversations for one tenant
+         * @description Requires daykeeper.conversations:read. The tenant is selected only by
+         *     the authenticated principal and path; provider credentials and
+         *     provider-internal identifiers are never returned. Results are bounded
+         *     to 100 conversations. This is a read-only operation.
+         */
+        get: operations["listOperatorConversations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tenants/{tenantId}/conversations/{conversationId}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        /**
+         * Read messages for one support conversation
+         * @description Requires daykeeper.conversations:read. Messages are bounded to 200 and provider internals are omitted.
+         */
+        get: operations["listOperatorConversationMessages"];
+        put?: never;
+        /**
+         * Send one plain-text support reply
+         * @description Requires daykeeper.conversations:write. The server dispatches the
+         *     provider write once and does not automatically retry it. If the
+         *     response is lost, the caller must inspect the conversation before
+         *     deciding whether to repeat the request. Content is trimmed and limited
+         *     to 4,000 characters.
+         */
+        post: operations["sendOperatorConversationReply"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/flows": {
         parameters: {
             query?: never;
@@ -874,6 +928,50 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        OperatorConversation: {
+            /** Format: int64 */
+            id: number;
+            status: string;
+            preview: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** Format: date-time */
+            lastActivityAt?: string;
+        };
+        OperatorMessage: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            conversationId: number;
+            senderType: string;
+            messageType: number;
+            content: string;
+            createdAt: string;
+        };
+        OperatorReplyInput: {
+            content: string;
+        };
+        OperatorConversationList: {
+            /** Format: uuid */
+            tenantId: string;
+            conversations: components["schemas"]["OperatorConversation"][];
+        };
+        OperatorConversationMessages: {
+            /** Format: uuid */
+            tenantId: string;
+            /** Format: int64 */
+            conversationId: number;
+            messages: components["schemas"]["OperatorMessage"][];
+        };
+        OperatorConversationReply: {
+            /** Format: uuid */
+            tenantId: string;
+            /** Format: int64 */
+            conversationId: number;
+            message: components["schemas"]["OperatorMessage"];
+        };
         Capabilities: {
             /** @constant */
             apiVersion: "v1";
@@ -954,9 +1052,8 @@ export interface components {
          *     TENANT_QUOTA_EXCEEDED means persisted tenant occupancy meets or exceeds
          *     the assigned limit. New codes may be added; an unknown denial must not
          *     be treated as permission to provision.
-         * @enum {string}
          */
-        TenantAdmissionDenialCode: "ENTITLEMENT_REQUIRED" | "ENTITLEMENT_INACTIVE" | "TENANT_QUOTA_EXCEEDED";
+        TenantAdmissionDenialCode: string;
         TenantAdmissionDenial: {
             code: components["schemas"]["TenantAdmissionDenialCode"];
             /** @constant */
@@ -987,7 +1084,15 @@ export interface components {
             remaining: number | null;
             /** @description Null only when admission is currently allowed. */
             denial: components["schemas"]["TenantAdmissionDenial"] | null;
-        };
+        } & ({
+            /** @constant */
+            allowed?: true;
+            denial?: null;
+        } | {
+            /** @constant */
+            allowed?: false;
+            denial?: components["schemas"]["TenantAdmissionDenial"];
+        });
         EntitlementStatus: {
             /**
              * Format: uuid
@@ -1626,13 +1731,20 @@ export interface components {
             replayed: boolean;
         };
         /** @enum {string} */
-        DaykeeperScope: "daykeeper.accounts:read" | "daykeeper.accounts:write" | "daykeeper.billing:read" | "daykeeper.credentials:read" | "daykeeper.credentials:write" | "daykeeper.flows:read" | "daykeeper.flows:write" | "daykeeper.flows:publish" | "daykeeper.provisioning:read" | "daykeeper.provisioning:apply" | "daykeeper.customer-sessions:write" | "daykeeper.lifecycle:write" | "daykeeper.customers:delete";
+        DaykeeperScope: "daykeeper.accounts:read" | "daykeeper.accounts:write" | "daykeeper.billing:read" | "daykeeper.credentials:read" | "daykeeper.credentials:write" | "daykeeper.flows:read" | "daykeeper.flows:write" | "daykeeper.flows:publish" | "daykeeper.provisioning:read" | "daykeeper.provisioning:apply" | "daykeeper.customer-sessions:write" | "daykeeper.lifecycle:write" | "daykeeper.customers:delete" | "daykeeper.conversations:read" | "daykeeper.conversations:write";
         ErrorDetail: {
             code: string;
             message: string;
             retryable: boolean;
             nextActions: string[];
             correlationId: string;
+            /**
+             * @description Optional marker for a dispatched mutation whose response was lost
+             *     or unavailable. When true, inspect the affected resource before
+             *     deciding whether to repeat the same request; clients must not
+             *     automatically retry the write.
+             */
+            outcomeUnknown?: boolean;
             fields?: string[];
         } & {
             [key: string]: unknown;
@@ -1708,6 +1820,15 @@ export interface components {
         };
         FlowVersionResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["FlowVersion"];
+        };
+        OperatorConversationListResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["OperatorConversationList"];
+        };
+        OperatorConversationMessagesResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["OperatorConversationMessages"];
+        };
+        OperatorConversationReplyResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["OperatorConversationReply"];
         };
         SuccessEnvelope: {
             data: unknown;
@@ -2782,6 +2903,90 @@ export interface operations {
             400: components["responses"]["Error"];
             401: components["responses"]["Error"];
             409: components["responses"]["IdempotencyKeyReused"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listOperatorConversations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded tenant conversation list. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorConversationListResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listOperatorConversationMessages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded conversation messages. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorConversationMessagesResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    sendOperatorConversationReply: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OperatorReplyInput"];
+            };
+        };
+        responses: {
+            /** @description Reply accepted by the provider. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorConversationReplyResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
             default: components["responses"]["Error"];
         };
     };
