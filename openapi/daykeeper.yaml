@@ -81,8 +81,8 @@ paths:
         reads, not HTTP policy errors. This read neither assigns an entitlement
         nor reserves capacity. The returned policy is a provisioning safeguard,
         not approved marketing pricing or general tier activation. The legacy
-        metering fields describe this
-        admission-only contract, not optional provider enforcement. Use /v1/usage
+        metering fields describe this admission-only contract, not optional
+        provider enforcement. Use /v1/usage
         for recorded resource counters; neither read proves traffic readiness.
       tags: [Entitlements]
       security:
@@ -1999,8 +1999,8 @@ components:
       type: object
       additionalProperties: false
       description: |
-        Immutable, versioned internal admission policy. The current
-        The current immutable policy permits a bounded number of persisted
+        Immutable, versioned internal admission policy. The current immutable
+        policy permits a bounded number of persisted
         tenants per organization. Free and paid policy plans are represented
         here for admission reporting; this field is not a billing entitlement
         or a promise of provider capabilities. Read the returned tenantLimit
@@ -2080,15 +2080,33 @@ components:
             - type: "null"
       oneOf:
         - properties:
+            enforced:
+              const: true
             allowed:
               const: true
+            used:
+              type: integer
+            limit:
+              type: [integer, "null"]
+            remaining:
+              type: [integer, "null"]
             denial:
               type: "null"
+          required: [enforced, allowed, used, limit, remaining, denial]
         - properties:
+            enforced:
+              const: true
             allowed:
               const: false
+            used:
+              type: integer
+            limit:
+              type: [integer, "null"]
+            remaining:
+              type: [integer, "null"]
             denial:
               $ref: "#/components/schemas/TenantAdmissionDenial"
+          required: [enforced, allowed, used, limit, remaining, denial]
     EntitlementStatus:
       type: object
       additionalProperties: false

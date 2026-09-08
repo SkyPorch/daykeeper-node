@@ -39,8 +39,8 @@ export interface paths {
          *     reads, not HTTP policy errors. This read neither assigns an entitlement
          *     nor reserves capacity. The returned policy is a provisioning safeguard,
          *     not approved marketing pricing or general tier activation. The legacy
-         *     metering fields describe this
-         *     admission-only contract, not optional provider enforcement. Use /v1/usage
+         *     metering fields describe this admission-only contract, not optional
+         *     provider enforcement. Use /v1/usage
          *     for recorded resource counters; neither read proves traffic readiness.
          */
         get: operations["getEntitlements"];
@@ -1027,8 +1027,8 @@ export interface components {
             [key: string]: unknown;
         };
         /**
-         * @description Immutable, versioned internal admission policy. The current
-         *     The current immutable policy permits a bounded number of persisted
+         * @description Immutable, versioned internal admission policy. The current immutable
+         *     policy permits a bounded number of persisted
          *     tenants per organization. Free and paid policy plans are represented
          *     here for admission reporting; this field is not a billing entitlement
          *     or a promise of provider capabilities. Read the returned tenantLimit
@@ -1087,12 +1087,22 @@ export interface components {
             denial: components["schemas"]["TenantAdmissionDenial"] | null;
         } & ({
             /** @constant */
-            allowed?: true;
-            denial?: null;
+            enforced: true;
+            /** @constant */
+            allowed: true;
+            used: number;
+            limit: number | null;
+            remaining: number | null;
+            denial: null;
         } | {
             /** @constant */
-            allowed?: false;
-            denial?: components["schemas"]["TenantAdmissionDenial"];
+            enforced: true;
+            /** @constant */
+            allowed: false;
+            used: number;
+            limit: number | null;
+            remaining: number | null;
+            denial: components["schemas"]["TenantAdmissionDenial"];
         });
         EntitlementStatus: {
             /**
