@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  package:
+  package-matrix:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -27,3 +27,17 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
+
+  # Branch protection requires one stable, non-matrix `package` context. Keep
+  # the Node-version matrix as the coverage gate, then publish one aggregate
+  # result that fails closed whenever any matrix leg fails or is cancelled.
+  package:
+    if: ${{ always() }}
+    needs: package-matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every Node matrix leg to pass
+        env:
+          MATRIX_RESULT: ${{ needs.package-matrix.result }}
+        run: test "$MATRIX_RESULT" = success
