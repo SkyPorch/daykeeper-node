@@ -122,6 +122,26 @@ remain separate operator-controlled gates.
 
 ### Management API
 
+#### Operator conversations
+
+Management clients with the conversation scopes can read tenant conversations
+and send plain-text replies through `operatorConversations`. Conversation IDs
+are positive provider display IDs. A reply is sent once; if its outcome is
+unknown, inspect the error before deciding whether to repeat the same call.
+
+```ts
+const conversations = await daykeeper.operatorConversations.list(tenantId);
+const history = await daykeeper.operatorConversations.messages(
+  tenantId,
+  conversations.conversations[0].id,
+);
+const sent = await daykeeper.operatorConversations.reply(
+  tenantId,
+  history.conversationId,
+  "Thanks — we are looking into this now.",
+);
+```
+
 ```ts
 import { DaykeeperClient } from "@skyporch/daykeeper";
 

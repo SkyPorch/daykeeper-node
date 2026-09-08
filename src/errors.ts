@@ -32,7 +32,7 @@ export class DaykeeperApiError extends Error {
   readonly status: number;
   readonly code: string;
   readonly retryable: boolean;
-  /** Always false: a status was received, so the outcome is known. */
+  /** True when the server says a dispatched mutation's outcome is unknown. */
   readonly outcomeUnknown: boolean;
   readonly nextActions: readonly string[];
   readonly correlationId?: string;
@@ -46,13 +46,14 @@ export class DaykeeperApiError extends Error {
     nextActions?: readonly string[];
     correlationId?: string;
     fields?: readonly string[];
+    outcomeUnknown?: boolean;
   }) {
     super(options.message);
     this.name = "DaykeeperApiError";
     this.status = options.status;
     this.code = options.code;
-    this.retryable = options.retryable;
-    this.outcomeUnknown = false;
+    this.outcomeUnknown = options.outcomeUnknown ?? false;
+    this.retryable = this.outcomeUnknown ? false : options.retryable;
     this.nextActions = options.nextActions ?? [];
     this.correlationId = options.correlationId;
     this.fields = options.fields;
