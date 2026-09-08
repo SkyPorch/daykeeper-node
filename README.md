@@ -22,11 +22,10 @@ customer-facing browser experiences.
 
 ## Use
 
-### Independent agent signup (unreleased)
+### Independent agent signup (0.2.0+)
 
-The 0.2.0 candidate includes signed signup without a human login. These routes
-must first be enabled by your Daykeeper operator; this is not yet a hosted
-availability announcement. Signup creates a workspace and a scoped seven-day
+Version 0.2.0 includes signed signup without a human login. These routes
+must be enabled by your Daykeeper operator. Signup creates a workspace and a scoped seven-day
 credential, not a provisioned inbox or an active customer route.
 
 Generate an owner key once with `createMachineOwnerKey()` and save its private
@@ -244,13 +243,12 @@ Use the separately scoped `lifecycle` and `erasure` purposes only from trusted
 service jobs. The SDK returns the short-lived token but never receives the
 control-plane signing key.
 
-## First-inbox preparation (unreleased 0.2.0)
+## First-inbox preparation (0.2.0+)
 
 With a matching server, inspect `daykeeper.entitlements.get()` and
 `daykeeper.capabilities()` before planning an inbox. The provisional
 Free entitlement counts tenant admission only. Its legacy `metering` fields
-do not inspect optional provider enforcement. It is not a shipped self-serve
-free tier.
+do not inspect optional provider enforcement or establish hosted plan pricing.
 
 When `capabilities.apiInboxes?.enabled === true`, add `inbox: { type: "api" }`
 to the tenant plan. This requires no customer website, DNS records or human
@@ -265,11 +263,12 @@ Apply with an idempotency key, then inspect the returned operation and
 `daykeeper.websiteChannels.get(tenantId)`.
 
 The metadata contains no provider secrets. `prepared` is not ready for traffic:
-inspect `trafficEnabled` independently; this server version always returns
-false. There is no SDK activation or credential-export method. These additions
-require a future coordinated SDK/server release and are not in npm 0.1.0.
+inspect `trafficEnabled` independently. Machine-owner API inbox activation is
+a separate `inboxActivations` workflow described above; it requires matching
+server capabilities. Preparation alone never enables traffic. These methods
+are available in 0.2.0 and later, not 0.1.0.
 
-## Provisioning recovery (unreleased 0.2.0)
+## Provisioning recovery (0.2.0+)
 
 After a reload or lost apply response, list your tenants and recover an existing
 tenant's creation operation without submitting another write:
@@ -284,9 +283,9 @@ console.log(operation.id, operation.state);
 Requires both `daykeeper.accounts:read` and `daykeeper.provisioning:read` and
 access to this tenant. This read never retries work or activates traffic.
 An adopted tenant without a creation operation, or an older server, may return 404. Reconcile the original request; do not create another tenant as a fallback.
-The method needs a coordinated SDK/server release and is not in npm 0.1.0.
+The method is available in 0.2.0 and later and requires a matching server.
 
-## Usage inspection (unreleased 0.2.0)
+## Usage inspection (0.2.0+)
 
 ```ts
 const usage = await daykeeper.usage.get({ signal: AbortSignal.timeout(5_000) });
@@ -301,10 +300,10 @@ billable resolutions. Null limits mean unconfigured, never unlimited.
 prove provider enforcement. There are no policy, reset, or activation methods.
 
 An older server may omit `capabilities.usage` or return 404. Do not respond by
-creating another tenant or retrying a mutation. This method needs a coordinated
-server and SDK release; it is not present in npm 0.1.0.
+creating another tenant or retrying a mutation. This method is available in
+0.2.0 and later and requires a matching server.
 
-## Agent credentials (unreleased 0.2.0)
+## Agent credentials (0.2.0+)
 
 Hosted OAuth is the preferred workload identity. When a headless environment
 cannot complete OAuth, a current human organization owner can create a named,
@@ -350,9 +349,9 @@ approved request with the same idempotency key. Never create a different
 credential as an automatic retry.
 
 Agent credentials cannot delegate credential administration, member changes,
-customer lifecycle, or erasure. This API requires a future coordinated
-SDK/server release and a server with `capabilities.agentCredentials.enabled`;
-it is not present in npm 0.1.0 and this source change does not enable it.
+customer lifecycle, or erasure. These SDK methods are available in 0.2.0 and
+later and require a server with `capabilities.agentCredentials.enabled`.
+Server enablement remains deployment-controlled.
 
 ## API groups
 
@@ -411,7 +410,9 @@ caller cancellation still use their dedicated error codes.
 
 Version `0.1.0` is the initial contract, and was published by hand with no
 provenance attestation despite the `publishConfig.provenance` declaration; see
-[`RELEASING.md`](RELEASING.md). `0.2.0` is unreleased and breaking. Types are
+[`RELEASING.md`](RELEASING.md). `0.2.0` is published and includes the breaking
+flow-idempotency changes listed in the changelog. Version `0.2.1` corrects
+paid-policy types; see its TypeScript compatibility note. Types are
 generated from the vendored Daykeeper OpenAPI commit recorded in
 [`openapi/SOURCE.md`](openapi/SOURCE.md); the SDK-to-contract mapping is in
 [`COMPATIBILITY.md`](COMPATIBILITY.md). Releases use the protected,
