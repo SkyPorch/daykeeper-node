@@ -1,7 +1,17 @@
-export { DaykeeperClient } from "./client.js";
+export { DaykeeperClient, generateIdempotencyKey } from "./client.js";
+export {
+  DaykeeperOnboardingClient,
+  DaykeeperOnboardingApiError,
+} from "./onboardingClient.js";
+export type { DaykeeperOnboardingClientOptions } from "./onboardingClient.js";
+export {
+  DaykeeperMachineSigner,
+  createMachineOwnerKey,
+} from "./machineSigner.js";
 export type {
   DaykeeperApplyOptions,
   DaykeeperClientOptions,
+  DaykeeperIdempotencyOptions,
   DaykeeperRequestOptions,
   DaykeeperTokenRequest,
   DaykeeperTokenProvider,

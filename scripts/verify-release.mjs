@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const manifest = JSON.parse(await readFile("package.json", "utf8"));
-const expectedTag = process.env.GITHUB_REF_NAME;
+// Only a published release event has a release tag requirement. Manual
+// workflow_dispatch rehearsals intentionally run from a branch/ref.
+const expectedTag =
+  process.env.GITHUB_EVENT_NAME === "release"
+    ? process.env.GITHUB_REF_NAME
+    : undefined;
 
 assert.notEqual(
   manifest.license,

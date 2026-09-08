@@ -3,6 +3,41 @@ import type { components } from "./generated/schema.js";
 type Schemas = components["schemas"];
 
 export type DaykeeperCapabilities = Schemas["Capabilities"];
+export type EntitlementStatus = Schemas["EntitlementStatus"];
+export type EntitlementPolicy = Schemas["EntitlementPolicy"];
+export type UsageStatus = Schemas["UsageStatus"];
+export type UsageResourceStatus = Schemas["UsageResourceStatus"];
+export type AgentCredentialScope = Schemas["AgentCredentialScope"];
+export type AgentCredentialState = Schemas["AgentCredential"]["state"];
+export type AgentCredential = Schemas["AgentCredential"];
+export type AgentCredentialPage = Schemas["AgentCredentialPage"];
+type GeneratedCreateAgentCredentialInput =
+  Schemas["CreateAgentCredentialInput"];
+export type CreateAgentCredentialInput = Omit<
+  GeneratedCreateAgentCredentialInput,
+  "validityDays"
+> & {
+  /** Defaults to 30 days when omitted. */
+  validityDays?: GeneratedCreateAgentCredentialInput["validityDays"];
+};
+export type CreateAgentCredentialResult =
+  Schemas["CreateAgentCredentialResult"];
+export type RevokeAgentCredentialResult =
+  Schemas["RevokeAgentCredentialResult"];
+export type DomainVerification = Schemas["DomainVerification"];
+export type DomainVerificationInput = Schemas["DomainVerificationInput"];
+export type MachinePublicKey = Schemas["MachinePublicKey"];
+export type MachineEnrollmentInput = Schemas["MachineEnrollmentInput"];
+export type MachineChallenge = Schemas["MachineChallenge"];
+export type MachineProofInput = Schemas["MachineProofInput"];
+export type MachineEnrollmentResult = Schemas["MachineEnrollmentResult"];
+export type MachineRotationInput = Schemas["MachineRotationInput"];
+export type MachineRotationResult = Schemas["MachineRotationResult"];
+export type MachineCredentialMetadata = Schemas["MachineCredentialMetadata"];
+export type WebsiteInboxSpec = Schemas["WebsiteInboxSpec"];
+export type WebsiteChannel = Schemas["WebsiteChannel"];
+export type ApiInboxSpec = Schemas["ApiInboxSpec"];
+export type InboxChannel = Schemas["InboxChannel"];
 export type DaykeeperScope = Schemas["DaykeeperScope"];
 export type TenantSpec = Schemas["TenantSpec"];
 export type TenantState = Schemas["Tenant"]["state"];
@@ -28,6 +63,44 @@ export type CustomerSessionPurpose =
 export type CreateCustomerSessionInput = Schemas["CreateCustomerSessionInput"];
 export type CustomerSession = Schemas["CustomerSession"];
 
+export type ApiInboxActivationReceipt = Schemas["ApiInboxActivation"];
+export type ApiInboxActivationState = ApiInboxActivationReceipt["state"];
+
+export interface OperatorConversation {
+  id: number;
+  status: string;
+  preview: string;
+  createdAt?: string;
+  updatedAt?: string;
+  lastActivityAt?: string;
+}
+
+export interface OperatorMessage {
+  id: number;
+  conversationId: number;
+  senderType: string;
+  messageType: number;
+  content: string;
+  createdAt: string;
+}
+
+export interface OperatorConversationList {
+  tenantId: string;
+  conversations: readonly OperatorConversation[];
+}
+
+export interface OperatorConversationMessages {
+  tenantId: string;
+  conversationId: number;
+  messages: readonly OperatorMessage[];
+}
+
+export interface OperatorConversationReply {
+  tenantId: string;
+  conversationId: number;
+  message: OperatorMessage;
+}
+
 export const DAYKEEPER_FLOW_SCHEMA_VERSION = "2026-08-01" as const;
 
 export type FlowCondition = Schemas["FlowCondition"];
@@ -38,6 +111,9 @@ export type FlowState = Schemas["Flow"]["state"];
 export type Flow = Schemas["Flow"];
 export type FlowVersion = Schemas["FlowVersion"];
 export type FlowWithVersion = Schemas["FlowWithVersion"];
+/** A flow mutation result. `replayed` is true when the server returned the
+ * stored result of an earlier identical request instead of applying a new one. */
+export type FlowMutationResult = Schemas["FlowMutationResult"];
 export type CreateFlowInput = Schemas["CreateFlowInput"];
 export type CreateFlowVersionInput = Schemas["CreateFlowVersionInput"];
 export type PublishFlowVersionInput = Schemas["PublishFlowVersionInput"];

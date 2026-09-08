@@ -21,6 +21,140 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/entitlements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Inspect the current organization's entitlements
+         * @description Requires a verified Daykeeper access token with daykeeper.accounts:read.
+         *     The organization comes only from the authenticated principal; there is
+         *     no organization selector. A tenant-bound principal with this scope also
+         *     receives organization-wide tenant occupancy, not a tenant-local count.
+         *
+         *     Unconfigured, revoked, and exhausted assignments are successful status
+         *     reads, not HTTP policy errors. This read neither assigns an entitlement
+         *     nor reserves capacity. The one-tenant free-2026-08-31 policy is a
+         *     provisional provisioning safeguard, not approved marketing pricing or
+         *     general free-tier activation. The legacy metering fields describe this
+         *     admission-only contract, not optional provider enforcement. Use /v1/usage
+         *     for recorded resource counters; neither read proves traffic readiness.
+         */
+        get: operations["getEntitlements"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Inspect the current organization's recorded resource usage
+         * @description Requires organization-wide daykeeper.billing:read. Tenant-bound
+         *     credentials are rejected, including those carrying that scope. There
+         *     is no organization, tenant, period, or policy selector; query parameters
+         *     are rejected. The organization comes only from the verified principal.
+         *
+         *     This read reports committed resource-safety counters in the current UTC
+         *     calendar month, pooled across the organization's tenants in one cell.
+         *     It is not a global multi-cell total, billable usage, a delivery count,
+         *     or a resolved-conversation count. All metered message records count,
+         *     including private, activity, human and automated records. Legacy traffic
+         *     without the optional provider boundary is not retroactively metered.
+         *
+         *     Unconfigured and paused assignments are successful reads. Null limits
+         *     mean no assignment, not unlimited capacity. Zero is an actual zero
+         *     allowance. Remaining capacity is clamped at zero. A new month does not
+         *     activate traffic or guarantee a retry; writeAdmission is always
+         *     not_evaluated. Installation, identity, routing, and current write-time
+         *     admission are checked elsewhere. This endpoint does not mutate them.
+         */
+        get: operations["getUsage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the current organization's agent credentials
+         * @description Requires a current human organization owner and
+         *     daykeeper.credentials:read. The organization comes only from the
+         *     verified principal; no organization, pagination, or filter selector is
+         *     accepted. Up to 100 bounded metadata records are returned, with all
+         *     active credentials ahead of recent inactive history. `hasMore` reports
+         *     omitted older history. Tokens and token hashes are never returned.
+         *
+         *     Hosted OAuth remains the preferred workload identity. This list does
+         *     not create, renew, recover, rotate, or reactivate a credential.
+         */
+        get: operations["listAgentCredentials"];
+        put?: never;
+        /**
+         * Create a reveal-once agent credential
+         * @description Requires a current human organization owner and
+         *     daykeeper.credentials:write. The same Idempotency-Key may be submitted
+         *     again only with the exact original body to reconcile an uncertain
+         *     response. A fresh write returns the token exactly once. A successful
+         *     replay returns the original metadata with `token: null`; no secret can
+         *     be recovered. Do not automatically retry this mutation with a new key.
+         *
+         *     The credential expires, cannot administer credentials or members, and
+         *     can receive only the explicitly selected delegable scopes. Hosted OAuth
+         *     remains the preferred workload identity.
+         */
+        post: operations["createAgentCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-credentials/{agentCredentialId}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agentCredentialId: components["parameters"]["AgentCredentialId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke an agent credential
+         * @description Requires a current human organization owner and
+         *     daykeeper.credentials:write. Revocation atomically disables the
+         *     underlying principal grant and is safe to repeat. It never creates,
+         *     replaces, recovers, or returns a secret.
+         */
+        post: operations["revokeAgentCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/tenant-plans": {
         parameters: {
             query?: never;
@@ -30,7 +164,16 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Plan creation of a tenant */
+        /**
+         * Plan creation of a tenant
+         * @description Optional website settings prepare the first website inbox in this same
+         *     tenant operation. Inspect websiteInboxes in capabilities first; disabled
+         *     provisioning rejects website settings with FEATURE_UNAVAILABLE. Omitting
+         *     website preserves account-only behavior. Plans with website settings
+         *     explain that preparation does not enable traffic. Existing entitlement,
+         *     idempotency and plan-expiry rules still apply. No provider identifier or
+         *     credential is returned, and preparation is not a successful client test.
+         */
         post: operations["planTenant"];
         delete?: never;
         options?: never;
@@ -50,6 +193,12 @@ export interface paths {
         /**
          * Apply a tenant creation plan
          * @description Returns the original result when the same idempotency key is replayed.
+         *     New tenant admission requires an active organization entitlement with
+         *     available tenant capacity. Planning alone reserves no capacity; apply
+         *     checks admission atomically. Every persisted tenant state counts,
+         *     including degraded, suspended, and deleting tenants. Failed provider
+         *     work does not free its reservation. Accepted apply replays bypass a
+         *     new entitlement decision; existing plan-expiry rules still apply.
          */
         post: operations["applyTenantPlan"];
         delete?: never;
@@ -174,6 +323,254 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/tenants/{tenantId}/website-channel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Inspect the tenant's first website inbox
+         * @description A non-cacheable status read, available after an accepted tenant plan
+         *     containing website settings. Prepared does not mean customer traffic is
+         *     enabled: routing, identity checks, usage enforcement and installation
+         *     verification must all pass before activation. This read never activates
+         *     a channel, returns provider credentials, or creates another inbox.
+         *     API-only inboxes are served by /inbox and return 404 here.
+         */
+        get: operations["getWebsiteChannel"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tenants/{tenantId}/inbox": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Inspect the tenant's inbox
+         * @description Public inbox metadata without provider secrets. Preparation does not enable traffic; activation requires a separate boundary.
+         */
+        get: operations["getInbox"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tenants/{tenantId}/domain-verifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create or replay a tenant domain verification
+         * @description Persists a DNS TXT observation challenge for the exact HTTPS origin.
+         *     This is durable verification evidence only; it never enables customer
+         *     traffic. Exact retries with the same Idempotency-Key return the
+         *     original challenge and DNS value without generating a new nonce.
+         *     Machine-owner principals are required; human and delegated tokens are
+         *     not supported. All responses, including errors, are not cacheable.
+         */
+        post: operations["createDomainVerification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tenants/{tenantId}/inbox-activations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Activate or replay a tenant API inbox
+         * @description Activates the already prepared API inbox for customer traffic and
+         *     returns a durable receipt. This operation accepts no customer
+         *     configuration and requires a machine-owner credential with
+         *     daykeeper.accounts:write. Exact retries with the same Idempotency-Key
+         *     return the original receipt with replayed set to true. If the write outcome is uncertain, reconcile with
+         *     GET /v1/tenants/{tenantId}/inbox-activations/{intent}; do not retry
+         *     automatically. All responses, including errors, are not cacheable.
+         */
+        post: operations["activateApiInbox"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tenants/{tenantId}/inbox-activations/{intent}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+                intent: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Read a tenant API inbox activation receipt
+         * @description Read the durable activation receipt without asserting current traffic readiness. Requires a machine-owner credential with daykeeper.accounts:read. All responses, including errors, are not cacheable.
+         */
+        get: operations["getApiInboxActivation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tenants/{tenantId}/inbox-activations/{intent}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+                intent: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke a tenant API inbox activation
+         * @description Revoke the durable activation receipt and disable its activation state. Requires a machine-owner credential with daykeeper.accounts:write; it accepts no customer configuration. All responses, including errors, are not cacheable.
+         */
+        post: operations["revokeApiInboxActivation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tenants/{tenantId}/domain-verifications/{verificationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+                verificationId: components["parameters"]["DomainVerificationId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read a tenant domain verification
+         * @description Read durable DNS evidence without activating traffic. Requires an opaque machine-owner credential; human and delegated tokens are unsupported.
+         */
+        get: operations["getDomainVerification"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tenants/{tenantId}/domain-verifications/{verificationId}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+                verificationId: components["parameters"]["DomainVerificationId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify a tenant domain through DNS
+         * @description Re-observes the public TXT record and commits a short-lived proof
+         *     receipt. Verification does not activate customer traffic. Machine-owner
+         *     principals are required and all responses are not cacheable.
+         */
+        post: operations["verifyDomainVerification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tenants/{tenantId}/domain-verifications/{verificationId}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+                verificationId: components["parameters"]["DomainVerificationId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke a tenant domain verification
+         * @description Revoke durable evidence without changing traffic activation. Requires an opaque machine-owner credential; human and delegated tokens are unsupported.
+         */
+        post: operations["revokeDomainVerification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tenants/{tenantId}/provisioning-operation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Find a tenant's provisioning operation
+         * @description Read the latest tenant.provision operation for this tenant within the
+         *     authenticated organization. Use this after reloading or losing an apply
+         *     response, without creating another tenant. Both read scopes and access
+         *     to this tenant are required. No query selectors are accepted.
+         *     An adopted tenant without a creation operation, or an older server,
+         *     may return 404. This read never retries work or activates customer traffic.
+         */
+        get: operations["getTenantProvisioningOperation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/operations/{operationId}": {
         parameters: {
             query?: never;
@@ -224,7 +621,24 @@ export interface paths {
         /** List a tenant's flows */
         get: operations["listTenantFlows"];
         put?: never;
-        /** Create a flow and its first immutable version */
+        /**
+         * Create a flow and its first immutable version
+         * @description Requires an Idempotency-Key header. The first application creates the
+         *     draft flow and its first immutable version and answers 201 with
+         *     `replayed: false`. Sending the same key with the exact same body again
+         *     answers 200 with the original flow and version and `replayed: true`; no
+         *     second flow is created, even after the flow has since changed.
+         *
+         *     Sending the same key with a different body is rejected with
+         *     IDEMPOTENCY_KEY_REUSED (409) and no write is applied. A slug already in
+         *     use by another flow is still rejected with RESOURCE_CONFLICT (409).
+         *
+         *     When a request fails without a usable response its outcome is unknown.
+         *     Repeat it with the same key and the exact original body to learn what
+         *     happened; do not retry an uncertain mutation under a new key. The Node
+         *     SDK surfaces this state as `outcomeUnknown` on the raised error and will
+         *     not retry it automatically.
+         */
         post: operations["createFlow"];
         delete?: never;
         options?: never;
@@ -279,7 +693,24 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Create the next immutable flow version */
+        /**
+         * Create the next immutable flow version
+         * @description Requires an Idempotency-Key header. The first application creates the
+         *     next immutable version and answers 201 with `replayed: false`. Sending
+         *     the same key with the exact same body again answers 200 with the
+         *     original version and `replayed: true`; no second version is created.
+         *
+         *     Sending the same key with a different body is rejected with
+         *     IDEMPOTENCY_KEY_REUSED (409) and no write is applied. Optimistic
+         *     concurrency still applies to every new key: a stale
+         *     `expectedLatestVersion` is rejected with RESOURCE_VERSION_CONFLICT (409).
+         *
+         *     When a request fails without a usable response its outcome is unknown.
+         *     Repeat it with the same key and the exact original body to learn what
+         *     happened; do not retry an uncertain mutation under a new key. The Node
+         *     SDK surfaces this state as `outcomeUnknown` on the raised error and will
+         *     not retry it automatically.
+         */
         post: operations["createFlowVersion"];
         delete?: never;
         options?: never;
@@ -324,8 +755,115 @@ export interface paths {
          * @description Publishing records audited desired state. The current capability reports
          *     flow execution as management_only; this operation does not yet execute a
          *     flow against customer conversations.
+         *
+         *     Requires an Idempotency-Key header. This operation always answers 200:
+         *     the first application publishes the version and reports
+         *     `replayed: false`, and the same key with the exact same body answers
+         *     with the original result and `replayed: true` without publishing again.
+         *
+         *     Sending the same key with a different body is rejected with
+         *     IDEMPOTENCY_KEY_REUSED (409) and no write is applied. Optimistic
+         *     concurrency still applies to every new key: a stale
+         *     `expectedResourceVersion` is rejected with RESOURCE_VERSION_CONFLICT
+         *     (409).
+         *
+         *     When a request fails without a usable response its outcome is unknown.
+         *     Repeat it with the same key and the exact original body to learn what
+         *     happened; do not retry an uncertain mutation under a new key. The Node
+         *     SDK surfaces this state as `outcomeUnknown` on the raised error and will
+         *     not retry it automatically.
          */
         post: operations["publishFlowVersion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/machine-enrollments/challenges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a signed machine enrollment challenge
+         * @description Creates a short-lived challenge for a machine workspace enrollment.
+         *     This endpoint uses signed body proofs and deliberately accepts neither
+         *     bearer authorization nor browser credentials.
+         */
+        post: operations["createMachineEnrollmentChallenge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/machine-enrollments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Enroll a machine workspace with a signed proof */
+        post: operations["enrollMachineWorkspace"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/machine-credential-rotations/challenges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a signed machine credential rotation challenge */
+        post: operations["createMachineCredentialRotationChallenge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/machine-credential-rotations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rotate a machine credential with a signed proof */
+        post: operations["rotateMachineCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/machine-credential-rotations/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Inspect the current machine credential with a signed proof */
+        post: operations["inspectMachineCredential"];
         delete?: never;
         options?: never;
         head?: never;
@@ -342,8 +880,44 @@ export interface components {
             emailChannels: {
                 enabled: boolean;
             };
+            /** @description Optional on older servers. Absent or disabled means website settings are not supported. */
+            websiteInboxes?: {
+                enabled: boolean;
+                /** @description Whether self-serve traffic activation is implemented and enabled. Preparation alone is insufficient. */
+                trafficActivation: boolean;
+            };
+            /** @description API-only inbox preparation and optional traffic activation capability. */
+            apiInboxes?: {
+                enabled: boolean;
+                trafficActivation: boolean;
+            };
             customerSessions: {
                 enabled: boolean;
+            };
+            /** @description Optional on older servers. DNS evidence does not activate traffic. */
+            domainVerifications?: {
+                enabled: boolean;
+                /** @constant */
+                authentication: "machine_owner";
+                /** @constant */
+                trafficActivation: false;
+            };
+            /** @description Optional on older servers. Inspection support does not imply scope, an assigned allowance, or traffic readiness. */
+            usage?: {
+                /** @constant */
+                inspection: true;
+                /** @constant */
+                kind: "resource_safety";
+                /** @constant */
+                scope: "organization";
+            };
+            /** @description Optional on older servers. Enabled discovery does not grant owner authority or credential scopes. */
+            agentCredentials?: {
+                enabled: boolean;
+                /** @constant */
+                reveal: "once";
+                /** @constant */
+                maximumValidityDays: 90;
             };
             flows: {
                 /** @constant */
@@ -351,6 +925,188 @@ export interface components {
                 /** @constant */
                 execution: "management_only";
             };
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * @description Immutable, versioned internal admission policy. The current
+         *     free-2026-08-31 policy permits one persisted tenant per organization.
+         *     That allowance is provisional, not approved pricing or a promise of
+         *     message, storage, channel, signup, or billing capabilities. Read the
+         *     returned tenantLimit rather than hardcoding the current example value.
+         */
+        EntitlementPolicy: {
+            /**
+             * @description Immutable policy version; distinct from assignmentVersion.
+             * @example free-2026-08-31
+             */
+            version: string;
+            /** @constant */
+            plan: "free";
+            /** @constant */
+            provisional: true;
+            /** @example 1 */
+            tenantLimit: number;
+        };
+        /**
+         * @description Stable tenant-admission denial code. ENTITLEMENT_REQUIRED means no
+         *     assignment; ENTITLEMENT_INACTIVE means the assignment is revoked;
+         *     TENANT_QUOTA_EXCEEDED means persisted tenant occupancy meets or exceeds
+         *     the assigned limit. New codes may be added; an unknown denial must not
+         *     be treated as permission to provision.
+         * @enum {string}
+         */
+        TenantAdmissionDenialCode: "ENTITLEMENT_REQUIRED" | "ENTITLEMENT_INACTIVE" | "TENANT_QUOTA_EXCEEDED";
+        TenantAdmissionDenial: {
+            code: components["schemas"]["TenantAdmissionDenialCode"];
+            /** @constant */
+            retryable: false;
+            /**
+             * @description Suggested recovery actions. Current policy denials return
+             *     inspect_entitlements and contact_organization_owner.
+             * @example [
+             *       "inspect_entitlements",
+             *       "contact_organization_owner"
+             *     ]
+             */
+            nextActions: string[];
+        };
+        TenantProvisioningEntitlement: {
+            /** @constant */
+            enforced: true;
+            /** @description Whether a new tenant can currently be admitted; not a reservation. */
+            allowed: boolean;
+            /** @description Organization-wide persisted tenant count, regardless of tenant state. */
+            used: number;
+            /** @description Assigned tenant limit, or null when no entitlement is assigned. */
+            limit: number | null;
+            /**
+             * @description max(0, limit - used), or null without an assignment. Remaining
+             *     capacity alone does not authorize provisioning of a revoked plan.
+             */
+            remaining: number | null;
+            /** @description Null only when admission is currently allowed. */
+            denial: components["schemas"]["TenantAdmissionDenial"] | null;
+        };
+        EntitlementStatus: {
+            /**
+             * Format: uuid
+             * @description Organization derived from the authenticated principal.
+             */
+            organizationId: string;
+            /** @enum {string} */
+            state: "unconfigured" | "active" | "revoked";
+            /** @description Monotonic assignment version, or null without an assignment. */
+            assignmentVersion: number | null;
+            policy: components["schemas"]["EntitlementPolicy"] | null;
+            tenantProvisioning: components["schemas"]["TenantProvisioningEntitlement"];
+            /**
+             * @deprecated
+             * @description Legacy admission-only placeholders. These do not inspect optional provider enforcement; use /v1/usage for recorded resource counters, not traffic readiness.
+             */
+            metering: {
+                /** @constant */
+                conversations: "not_enforced";
+                /** @constant */
+                storage: "not_enforced";
+            };
+        };
+        UsageResourceStatus: {
+            /** @description Committed records counted in this UTC period; may exceed a subsequently reduced allowance. */
+            used: number;
+            /** @description Assigned provisional ceiling; null means unconfigured, never unlimited. */
+            limit: number | null;
+            /** @description max(0, limit - used), or null when unconfigured. Not permission to write. */
+            remaining: number | null;
+            /** @description used >= limit, or null when unconfigured. Zero allowance is reached even at zero usage. */
+            limitReached: boolean | null;
+        };
+        UsageStatus: {
+            /** Format: uuid */
+            organizationId: string;
+            /** @constant */
+            kind: "resource_safety";
+            /** @constant */
+            aggregation: "organization_single_cell";
+            /**
+             * Format: date-time
+             * @description Database statement time for this single committed snapshot.
+             */
+            asOf: string;
+            period: {
+                /**
+                 * Format: date-time
+                 * @description Inclusive first day of the current UTC calendar month.
+                 */
+                startsAt: string;
+                /**
+                 * Format: date-time
+                 * @description Exclusive first day of the next UTC month, not a retry guarantee.
+                 */
+                endsAt: string;
+                /** @constant */
+                timezone: "UTC";
+            };
+            /** @enum {string} */
+            state: "unconfigured" | "active" | "paused";
+            assignmentVersion: number | null;
+            policy: {
+                version: string;
+                /** @constant */
+                provisional: true;
+            } | null;
+            resources: {
+                contactRecords: components["schemas"]["UsageResourceStatus"];
+                conversationRecords: components["schemas"]["UsageResourceStatus"];
+                messageRecords: components["schemas"]["UsageResourceStatus"];
+            };
+            /** @constant */
+            writeAdmission: "not_evaluated";
+            /** @description Recovery hints for people and agents; never automatic authority to mutate policy. */
+            nextActions: string[];
+        };
+        DomainVerificationInput: {
+            /** @description Exact canonical HTTPS origin; no path, query, fragment, wildcard, credentials, or IP literal. */
+            origin: string;
+        };
+        EmptyObject: Record<string, never>;
+        ApiInboxActivation: {
+            /** Format: uuid */
+            activationId: string;
+            /** Format: uuid */
+            tenantId: string;
+            /** Format: uuid */
+            channelId: string;
+            intent: string;
+            /** @enum {string} */
+            state: "active" | "revoked";
+            /** Format: int64 */
+            createdAt: number;
+            /** Format: int64 */
+            revokedAt: number | null;
+            replayed: boolean;
+        };
+        DomainVerificationDns: {
+            /** @constant */
+            type: "TXT";
+            name: string;
+            value: string;
+        };
+        DomainVerification: {
+            /** Format: uuid */
+            challengeId: string;
+            /** Format: uuid */
+            tenantId: string;
+            origin: string;
+            /** @enum {string} */
+            state: "pending" | "verified" | "expired" | "revoked";
+            dns: components["schemas"]["DomainVerificationDns"];
+            /** Format: int64 */
+            expiresAt: number;
+            /** Format: int64 */
+            verifiedAt: number | null;
+            /** Format: int64 */
+            revokedAt: number | null;
         };
         TenantSpec: {
             name: string;
@@ -359,11 +1115,73 @@ export interface components {
             region?: string;
             /** Format: email */
             supportEmail?: string;
-            administrator: {
+            website?: components["schemas"]["WebsiteInboxSpec"];
+            inbox?: components["schemas"]["ApiInboxSpec"];
+            /** @description Optional legacy contact metadata; it does not establish ownership or access. */
+            administrator?: {
                 name: string;
                 /** Format: email */
                 email: string;
             };
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * @description Exact HTTPS root URLs only; the scheme must be lowercase https. No
+         *     credentials, query, fragment, path, whitespace, delimiter or wildcard.
+         *     Hostnames must be valid DNS names or IP literals. The server normalizes default ports, host case and a trailing
+         *     slash. allowedOrigins defaults to the website origin; when supplied it
+         *     must include that origin and contain no duplicates after normalization.
+         *     Origins are returned in sorted canonical form. Domain settings are
+         *     not a substitute for signed customer identity or server authorization.
+         */
+        WebsiteInboxSpec: {
+            /** Format: uri */
+            websiteUrl: string;
+            allowedOrigins?: string[];
+        };
+        ApiInboxSpec: {
+            /** @constant */
+            type: "api";
+        };
+        WebsiteChannel: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            organizationId: string;
+            /** Format: uuid */
+            tenantId: string;
+            spec: components["schemas"]["WebsiteInboxSpec"];
+            /**
+             * @description Extensible observed state. Current values are provisioning, prepared, and degraded. Treat unknown states as not ready; always inspect trafficEnabled independently.
+             * @example prepared
+             */
+            state: string;
+            /** @description False until the complete activation boundary is implemented and verified. A succeeded provisioning operation alone does not make this true. */
+            trafficEnabled: boolean;
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        InboxChannel: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            organizationId: string;
+            /** Format: uuid */
+            tenantId: string;
+            spec: components["schemas"]["WebsiteInboxSpec"] | components["schemas"]["ApiInboxSpec"];
+            /** @description Extensible observed state; treat unknown states as not ready. */
+            state: string;
+            /** @description False until the complete activation boundary is implemented and verified. A succeeded provisioning operation alone does not make this true. */
+            trafficEnabled: boolean;
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
         };
         Tenant: {
             /** Format: uuid */
@@ -646,6 +1464,17 @@ export interface components {
             flow: components["schemas"]["Flow"];
             version: components["schemas"]["FlowVersion"];
         };
+        FlowMutationResult: {
+            flow: components["schemas"]["Flow"];
+            version: components["schemas"]["FlowVersion"];
+            /**
+             * @description True when the stored result of an earlier identical request under
+             *     the same idempotency key was returned and no write was applied.
+             */
+            replayed: boolean;
+        } & {
+            [key: string]: unknown;
+        };
         CreateFlowInput: {
             name: string;
             slug: string;
@@ -659,8 +1488,145 @@ export interface components {
         PublishFlowVersionInput: {
             expectedResourceVersion: number;
         };
+        MachinePublicKey: {
+            /** @constant */
+            kty: "EC";
+            /** @constant */
+            crv: "P-256";
+            x: string;
+            y: string;
+        };
+        MachineEnrollmentInput: {
+            name: string;
+            idempotencyKey: string;
+            publicKey: components["schemas"]["MachinePublicKey"];
+        };
+        MachineChallenge: {
+            /** Format: uuid */
+            challengeId: string;
+            /** Format: uri */
+            audience: string;
+            nonce: string;
+            keyThumbprint: string;
+            requestHash: string;
+            createdAt: number;
+            expiresAt: number;
+        };
+        MachineProofInput: {
+            /** Format: uuid */
+            challengeId: string;
+            proof: string;
+        };
+        MachineEnrollmentResult: {
+            /** Format: uuid */
+            ownerId: string;
+            /** Format: uuid */
+            organizationId: string;
+            organizationSlug: string;
+            credentialIssued: boolean;
+            credential: {
+                /** Format: uuid */
+                id: string;
+                /** Format: date-time */
+                expiresAt: string;
+                /** Format: date-time */
+                revokedAt: string | null;
+                /** @constant */
+                policyVersion: "machine-onboarding-v1";
+            };
+            replayed: boolean;
+            token: string | null;
+        };
+        MachineRotationInput: {
+            /** Format: uuid */
+            ownerId: string;
+            /** Format: uuid */
+            expectedCredentialId: string;
+            /** Format: uuid */
+            intentId: string;
+        };
+        MachineRotationResult: {
+            /** Format: uuid */
+            ownerId: string;
+            /** Format: uuid */
+            organizationId: string;
+            /** Format: uuid */
+            credentialId: string;
+            /** Format: uuid */
+            predecessorId: string;
+            /** Format: uuid */
+            intentId: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /** Format: date-time */
+            revokedAt: string | null;
+            replayed: boolean;
+            token: string | null;
+        };
+        MachineCredentialMetadata: {
+            /** Format: uuid */
+            ownerId: string;
+            /** Format: uuid */
+            organizationId: string;
+            /** Format: uuid */
+            credentialId: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /** Format: date-time */
+            revokedAt: string | null;
+        };
+        /**
+         * @description A scope that a human owner may delegate to a headless agent credential.
+         * @enum {string}
+         */
+        AgentCredentialScope: "daykeeper.accounts:read" | "daykeeper.accounts:write" | "daykeeper.flows:read" | "daykeeper.flows:write" | "daykeeper.flows:publish" | "daykeeper.provisioning:read" | "daykeeper.provisioning:apply" | "daykeeper.billing:read";
+        AgentCredential: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: uuid
+             * @description Organization derived from the authenticated owner.
+             */
+            organizationId: string;
+            name: string;
+            /** @description Bounded display hint; never usable as a bearer credential. */
+            hint: string;
+            scopes: components["schemas"]["AgentCredentialScope"][];
+            /** @enum {string} */
+            state: "active" | "expired" | "revoked";
+            /** Format: date-time */
+            expiresAt: string;
+            /** Format: date-time */
+            lastUsedAt: string | null;
+            /** Format: date-time */
+            revokedAt: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        AgentCredentialPage: {
+            items: components["schemas"]["AgentCredential"][];
+            /** @description True when older inactive history was omitted. */
+            hasMore: boolean;
+        };
+        CreateAgentCredentialInput: {
+            name: string;
+            scopes: components["schemas"]["AgentCredentialScope"][];
+            /** @default 30 */
+            validityDays: number;
+        };
+        /** @description A fresh result has a token and replayed false; a replay has token null and replayed true. */
+        CreateAgentCredentialResult: {
+            credential: components["schemas"]["AgentCredential"];
+            /** @description Sensitive bearer token revealed only on the original successful response. Never log or persist it outside a secret manager. */
+            token: string | null;
+            replayed: boolean;
+        };
+        RevokeAgentCredentialResult: {
+            credential: components["schemas"]["AgentCredential"];
+            replayed: boolean;
+        };
         /** @enum {string} */
-        DaykeeperScope: "daykeeper.accounts:read" | "daykeeper.accounts:write" | "daykeeper.flows:read" | "daykeeper.flows:write" | "daykeeper.flows:publish" | "daykeeper.provisioning:read" | "daykeeper.provisioning:apply" | "daykeeper.customer-sessions:write" | "daykeeper.lifecycle:write" | "daykeeper.customers:delete";
+        DaykeeperScope: "daykeeper.accounts:read" | "daykeeper.accounts:write" | "daykeeper.billing:read" | "daykeeper.credentials:read" | "daykeeper.credentials:write" | "daykeeper.flows:read" | "daykeeper.flows:write" | "daykeeper.flows:publish" | "daykeeper.provisioning:read" | "daykeeper.provisioning:apply" | "daykeeper.customer-sessions:write" | "daykeeper.lifecycle:write" | "daykeeper.customers:delete";
         ErrorDetail: {
             code: string;
             message: string;
@@ -668,12 +1634,29 @@ export interface components {
             nextActions: string[];
             correlationId: string;
             fields?: string[];
+        } & {
+            [key: string]: unknown;
         };
         ErrorResponse: {
             error: components["schemas"]["ErrorDetail"];
         };
         CapabilitiesResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["Capabilities"];
+        };
+        EntitlementStatusResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["EntitlementStatus"];
+        };
+        UsageStatusResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["UsageStatus"];
+        };
+        AgentCredentialPageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["AgentCredentialPage"];
+        };
+        CreateAgentCredentialResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["CreateAgentCredentialResult"];
+        };
+        RevokeAgentCredentialResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["RevokeAgentCredentialResult"];
         };
         TenantPlanResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["TenantPlan"];
@@ -689,6 +1672,18 @@ export interface components {
         };
         CustomerSessionResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["CustomerSession"];
+        };
+        WebsiteChannelResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["WebsiteChannel"];
+        };
+        InboxChannelResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["InboxChannel"];
+        };
+        DomainVerificationResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["DomainVerification"];
+        };
+        ApiInboxActivationResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["ApiInboxActivation"];
         };
         EmailChannelPlanResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["EmailChannelPlan"];
@@ -708,6 +1703,9 @@ export interface components {
         FlowWithVersionResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["FlowWithVersion"];
         };
+        FlowMutationResultResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["FlowMutationResult"];
+        };
         FlowVersionResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["FlowVersion"];
         };
@@ -716,6 +1714,21 @@ export interface components {
         };
     };
     responses: {
+        /**
+         * @description The idempotency key is already bound to a different request, or the
+         *     mutation conflicts with current state. IDEMPOTENCY_KEY_REUSED is never
+         *     retryable under the same key and no write was applied; resend the exact
+         *     original request under that key, or start a new mutation under a new
+         *     key. Existing flow conflict codes still apply.
+         */
+        IdempotencyKeyReused: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
         /** @description Structured Daykeeper error. Resource denials do not disclose cross-tenant existence. */
         Error: {
             headers: {
@@ -729,14 +1742,93 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
+        /** @description Domain verification error; never cache this response. */
+        DomainError: {
+            headers: {
+                "Cache-Control"?: "no-store";
+                "X-Request-Id"?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description Domain verification request rejected; never cache this response. */
+        DomainRequestError: {
+            headers: {
+                "Cache-Control"?: "no-store";
+                "X-Request-Id"?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description Domain verification request rate limited; retry only as directed. */
+        DomainRateLimited: {
+            headers: {
+                "Cache-Control"?: "no-store";
+                "Retry-After"?: number;
+                "X-Request-Id"?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description API inbox activation error; never cache this response. */
+        ApiInboxActivationError: {
+            headers: {
+                "Cache-Control"?: "no-store";
+                "X-Request-Id"?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description API inbox activation request rejected; never cache this response. */
+        ApiInboxActivationRequestError: {
+            headers: {
+                "Cache-Control"?: "no-store";
+                "X-Request-Id"?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description API inbox activation is bounded; do not retry uncertain writes automatically. */
+        ApiInboxActivationRateLimited: {
+            headers: {
+                "Cache-Control"?: "no-store";
+                "Retry-After"?: number;
+                "X-Request-Id"?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
     };
     parameters: {
-        /** @description A caller-generated key reused only for an exact logical mutation. */
+        /**
+         * @description A caller-generated key reused only for an exact logical mutation. The
+         *     key is bound to the request the first time it is applied. Repeating that
+         *     exact request with the same key returns the stored original result
+         *     instead of writing again, and the operation reports the repeat as a
+         *     replay. Reusing the key for a different request is rejected and no write
+         *     is applied. A missing or malformed key is rejected with INVALID_INPUT
+         *     (400). Use the same key to reconcile a request whose outcome is unknown;
+         *     do not retry an uncertain mutation under a new key.
+         */
         IdempotencyKey: string;
         TenantId: string;
         OperationId: string;
         FlowId: string;
         FlowVersionNumber: number;
+        AgentCredentialId: string;
+        DomainVerificationId: string;
     };
     requestBodies: never;
     headers: never;
@@ -763,6 +1855,188 @@ export interface operations {
                 };
             };
             401: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getEntitlements: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The authenticated organization's current admission status. */
+            200: {
+                headers: {
+                    /** @description Entitlement status must not be cached. */
+                    "Cache-Control"?: "no-store";
+                    /** @description Correlation identifier shared with support and audit logs. */
+                    "X-Request-Id"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EntitlementStatusResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            /** @description The access token lacks daykeeper.accounts:read (SCOPE_REQUIRED). */
+            403: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getUsage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One committed snapshot of the authenticated organization's recorded usage. */
+            200: {
+                headers: {
+                    /** @description Usage responses, including errors, must not be cached. */
+                    "Cache-Control"?: "no-store";
+                    /** @description Correlation identifier for support. */
+                    "X-Request-Id"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageStatusResponse"];
+                };
+            };
+            /** @description Query selectors are not accepted (INVALID_INPUT). */
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            /** @description Missing billing-read scope (SCOPE_REQUIRED) or tenant-bound credential (ORGANIZATION_ACCESS_REQUIRED). Non-retryable; obtain organization-wide access. */
+            403: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listAgentCredentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded credential metadata for the authenticated organization. */
+            200: {
+                headers: {
+                    /** @description Credential metadata must not be cached. */
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentCredentialPageResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            /** @description Missing credential-read scope or current human owner authority. */
+            403: components["responses"]["Error"];
+            /** @description Agent credential management is not enabled (FEATURE_UNAVAILABLE). */
+            503: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    createAgentCredential: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description A caller-generated key reused only for an exact logical mutation. The
+                 *     key is bound to the request the first time it is applied. Repeating that
+                 *     exact request with the same key returns the stored original result
+                 *     instead of writing again, and the operation reports the repeat as a
+                 *     replay. Reusing the key for a different request is rejected and no write
+                 *     is applied. A missing or malformed key is rejected with INVALID_INPUT
+                 *     (400). Use the same key to reconcile a request whose outcome is unknown;
+                 *     do not retry an uncertain mutation under a new key.
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAgentCredentialInput"];
+            };
+        };
+        responses: {
+            /** @description The exact original request was replayed; the secret is no longer available. */
+            200: {
+                headers: {
+                    /** @description Reveal-once results must not be cached. */
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateAgentCredentialResponse"];
+                };
+            };
+            /** @description A credential was created and its secret is revealed exactly once. */
+            201: {
+                headers: {
+                    /** @description Reveal-once results must not be cached. */
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateAgentCredentialResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            /** @description Missing credential-write scope or current human owner authority. */
+            403: components["responses"]["Error"];
+            /** @description Idempotency input changed or the active credential limit was reached. */
+            409: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+            /** @description Agent credential management is not enabled (FEATURE_UNAVAILABLE). */
+            503: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    revokeAgentCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agentCredentialId: components["parameters"]["AgentCredentialId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description The credential is revoked, including an idempotent replay. */
+            200: {
+                headers: {
+                    /** @description Credential mutation results must not be cached. */
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevokeAgentCredentialResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            /** @description Missing credential-write scope or current human owner authority. */
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            /** @description Agent credential management is not enabled (FEATURE_UNAVAILABLE). */
+            503: components["responses"]["Error"];
             default: components["responses"]["Error"];
         };
     };
@@ -796,7 +2070,16 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description A caller-generated key reused only for an exact logical mutation. */
+                /**
+                 * @description A caller-generated key reused only for an exact logical mutation. The
+                 *     key is bound to the request the first time it is applied. Repeating that
+                 *     exact request with the same key returns the stored original result
+                 *     instead of writing again, and the operation reports the repeat as a
+                 *     replay. Reusing the key for a different request is rejected and no write
+                 *     is applied. A missing or malformed key is rejected with INVALID_INPUT
+                 *     (400). Use the same key to reconcile a request whose outcome is unknown;
+                 *     do not retry an uncertain mutation under a new key.
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -827,6 +2110,33 @@ export interface operations {
                 };
             };
             401: components["responses"]["Error"];
+            /**
+             * @description The caller lacks the required scope, or the organization has no
+             *     assigned entitlement (ENTITLEMENT_REQUIRED) or a revoked assignment
+             *     (ENTITLEMENT_INACTIVE). Entitlement denials are not retryable until
+             *     the organization's assignment changes.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /**
+             * @description A provisioning conflict, including an exhausted tenant allowance
+             *     (TENANT_QUOTA_EXCEEDED). Quota denials are not retryable without a
+             *     capacity or assignment change; existing conflict codes still apply.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             default: components["responses"]["Error"];
         };
     };
@@ -936,7 +2246,16 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description A caller-generated key reused only for an exact logical mutation. */
+                /**
+                 * @description A caller-generated key reused only for an exact logical mutation. The
+                 *     key is bound to the request the first time it is applied. Repeating that
+                 *     exact request with the same key returns the stored original result
+                 *     instead of writing again, and the operation reports the repeat as a
+                 *     replay. Reusing the key for a different request is rejected and no write
+                 *     is applied. A missing or malformed key is rejected with INVALID_INPUT
+                 *     (400). Use the same key to reconcile a request whose outcome is unknown;
+                 *     do not retry an uncertain mutation under a new key.
+                 */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -991,6 +2310,354 @@ export interface operations {
                 };
             };
             401: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getWebsiteChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Public website-channel metadata without provider secrets. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebsiteChannelResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getInbox: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Public inbox metadata without provider secrets. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboxChannelResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    createDomainVerification: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description A caller-generated key reused only for an exact logical mutation. The
+                 *     key is bound to the request the first time it is applied. Repeating that
+                 *     exact request with the same key returns the stored original result
+                 *     instead of writing again, and the operation reports the repeat as a
+                 *     replay. Reusing the key for a different request is rejected and no write
+                 *     is applied. A missing or malformed key is rejected with INVALID_INPUT
+                 *     (400). Use the same key to reconcile a request whose outcome is unknown;
+                 *     do not retry an uncertain mutation under a new key.
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DomainVerificationInput"];
+            };
+        };
+        responses: {
+            /** @description A new or exact-replayed domain verification challenge. */
+            201: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DomainVerificationResponse"];
+                };
+            };
+            400: components["responses"]["DomainError"];
+            401: components["responses"]["DomainError"];
+            403: components["responses"]["DomainError"];
+            404: components["responses"]["DomainError"];
+            409: components["responses"]["DomainError"];
+            413: components["responses"]["DomainRequestError"];
+            415: components["responses"]["DomainRequestError"];
+            429: components["responses"]["DomainRateLimited"];
+            503: components["responses"]["DomainError"];
+        };
+    };
+    activateApiInbox: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description A caller-generated key reused only for an exact logical mutation. The
+                 *     key is bound to the request the first time it is applied. Repeating that
+                 *     exact request with the same key returns the stored original result
+                 *     instead of writing again, and the operation reports the repeat as a
+                 *     replay. Reusing the key for a different request is rejected and no write
+                 *     is applied. A missing or malformed key is rejected with INVALID_INPUT
+                 *     (400). Use the same key to reconcile a request whose outcome is unknown;
+                 *     do not retry an uncertain mutation under a new key.
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmptyObject"];
+            };
+        };
+        responses: {
+            /** @description A new or exact-replayed API inbox activation receipt. */
+            201: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiInboxActivationResponse"];
+                };
+            };
+            400: components["responses"]["ApiInboxActivationError"];
+            401: components["responses"]["ApiInboxActivationError"];
+            403: components["responses"]["ApiInboxActivationError"];
+            404: components["responses"]["ApiInboxActivationError"];
+            409: components["responses"]["ApiInboxActivationError"];
+            413: components["responses"]["ApiInboxActivationRequestError"];
+            415: components["responses"]["ApiInboxActivationRequestError"];
+            429: components["responses"]["ApiInboxActivationRateLimited"];
+            503: components["responses"]["ApiInboxActivationError"];
+        };
+    };
+    getApiInboxActivation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+                intent: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The durable API inbox activation receipt. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiInboxActivationResponse"];
+                };
+            };
+            400: components["responses"]["ApiInboxActivationError"];
+            401: components["responses"]["ApiInboxActivationError"];
+            403: components["responses"]["ApiInboxActivationError"];
+            404: components["responses"]["ApiInboxActivationError"];
+            429: components["responses"]["ApiInboxActivationRateLimited"];
+            503: components["responses"]["ApiInboxActivationError"];
+        };
+    };
+    revokeApiInboxActivation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+                intent: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmptyObject"];
+            };
+        };
+        responses: {
+            /** @description The revoked API inbox activation receipt. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiInboxActivationResponse"];
+                };
+            };
+            400: components["responses"]["ApiInboxActivationError"];
+            401: components["responses"]["ApiInboxActivationError"];
+            403: components["responses"]["ApiInboxActivationError"];
+            404: components["responses"]["ApiInboxActivationError"];
+            409: components["responses"]["ApiInboxActivationError"];
+            413: components["responses"]["ApiInboxActivationRequestError"];
+            415: components["responses"]["ApiInboxActivationRequestError"];
+            429: components["responses"]["ApiInboxActivationRateLimited"];
+            503: components["responses"]["ApiInboxActivationError"];
+        };
+    };
+    getDomainVerification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+                verificationId: components["parameters"]["DomainVerificationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Domain verification evidence. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DomainVerificationResponse"];
+                };
+            };
+            400: components["responses"]["DomainError"];
+            401: components["responses"]["DomainError"];
+            403: components["responses"]["DomainError"];
+            404: components["responses"]["DomainError"];
+            429: components["responses"]["DomainRateLimited"];
+            503: components["responses"]["DomainError"];
+        };
+    };
+    verifyDomainVerification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+                verificationId: components["parameters"]["DomainVerificationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmptyObject"];
+            };
+        };
+        responses: {
+            /** @description Updated or already verified domain evidence. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DomainVerificationResponse"];
+                };
+            };
+            400: components["responses"]["DomainError"];
+            401: components["responses"]["DomainError"];
+            403: components["responses"]["DomainError"];
+            404: components["responses"]["DomainError"];
+            409: components["responses"]["DomainError"];
+            413: components["responses"]["DomainRequestError"];
+            415: components["responses"]["DomainRequestError"];
+            429: components["responses"]["DomainRateLimited"];
+            503: components["responses"]["DomainError"];
+        };
+    };
+    revokeDomainVerification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+                verificationId: components["parameters"]["DomainVerificationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmptyObject"];
+            };
+        };
+        responses: {
+            /** @description Revoked domain evidence. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DomainVerificationResponse"];
+                };
+            };
+            400: components["responses"]["DomainError"];
+            401: components["responses"]["DomainError"];
+            403: components["responses"]["DomainError"];
+            404: components["responses"]["DomainError"];
+            409: components["responses"]["DomainError"];
+            413: components["responses"]["DomainRequestError"];
+            415: components["responses"]["DomainRequestError"];
+            429: components["responses"]["DomainRateLimited"];
+            503: components["responses"]["DomainError"];
+        };
+    };
+    getTenantProvisioningOperation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current durable creation operation, without changing its state. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
             default: components["responses"]["Error"];
         };
     };
@@ -1069,7 +2736,19 @@ export interface operations {
     createFlow: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /**
+                 * @description A caller-generated key reused only for an exact logical mutation. The
+                 *     key is bound to the request the first time it is applied. Repeating that
+                 *     exact request with the same key returns the stored original result
+                 *     instead of writing again, and the operation reports the repeat as a
+                 *     replay. Reusing the key for a different request is rejected and no write
+                 *     is applied. A missing or malformed key is rejected with INVALID_INPUT
+                 *     (400). Use the same key to reconcile a request whose outcome is unknown;
+                 *     do not retry an uncertain mutation under a new key.
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 tenantId: components["parameters"]["TenantId"];
             };
@@ -1081,16 +2760,28 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Draft flow and immutable version one. */
+            /** @description The exact original request was replayed; replayed is true. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FlowMutationResultResponse"];
+                };
+            };
+            /** @description Draft flow and immutable version one; replayed is false. */
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["FlowWithVersionResponse"];
+                    "application/json": components["schemas"]["FlowMutationResultResponse"];
                 };
             };
+            /** @description The Idempotency-Key header is missing or malformed (INVALID_INPUT). */
+            400: components["responses"]["Error"];
             401: components["responses"]["Error"];
+            409: components["responses"]["IdempotencyKeyReused"];
             default: components["responses"]["Error"];
         };
     };
@@ -1145,7 +2836,19 @@ export interface operations {
     createFlowVersion: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /**
+                 * @description A caller-generated key reused only for an exact logical mutation. The
+                 *     key is bound to the request the first time it is applied. Repeating that
+                 *     exact request with the same key returns the stored original result
+                 *     instead of writing again, and the operation reports the repeat as a
+                 *     replay. Reusing the key for a different request is rejected and no write
+                 *     is applied. A missing or malformed key is rejected with INVALID_INPUT
+                 *     (400). Use the same key to reconcile a request whose outcome is unknown;
+                 *     do not retry an uncertain mutation under a new key.
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 flowId: components["parameters"]["FlowId"];
             };
@@ -1157,16 +2860,28 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Flow and newly created version. */
+            /** @description The exact original request was replayed; replayed is true. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FlowMutationResultResponse"];
+                };
+            };
+            /** @description Flow and newly created version; replayed is false. */
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["FlowWithVersionResponse"];
+                    "application/json": components["schemas"]["FlowMutationResultResponse"];
                 };
             };
+            /** @description The Idempotency-Key header is missing or malformed (INVALID_INPUT). */
+            400: components["responses"]["Error"];
             401: components["responses"]["Error"];
+            409: components["responses"]["IdempotencyKeyReused"];
             default: components["responses"]["Error"];
         };
     };
@@ -1198,7 +2913,19 @@ export interface operations {
     publishFlowVersion: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /**
+                 * @description A caller-generated key reused only for an exact logical mutation. The
+                 *     key is bound to the request the first time it is applied. Repeating that
+                 *     exact request with the same key returns the stored original result
+                 *     instead of writing again, and the operation reports the repeat as a
+                 *     replay. Reusing the key for a different request is rejected and no write
+                 *     is applied. A missing or malformed key is rejected with INVALID_INPUT
+                 *     (400). Use the same key to reconcile a request whose outcome is unknown;
+                 *     do not retry an uncertain mutation under a new key.
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 flowId: components["parameters"]["FlowId"];
                 version: components["parameters"]["FlowVersionNumber"];
@@ -1211,16 +2938,179 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Flow with the selected published version. */
+            /**
+             * @description Flow with the selected published version. replayed is true when the
+             *     same key already published this exact request, and false when this
+             *     request performed the publication.
+             */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["FlowWithVersionResponse"];
+                    "application/json": components["schemas"]["FlowMutationResultResponse"];
                 };
             };
+            /** @description The Idempotency-Key header is missing or malformed (INVALID_INPUT). */
+            400: components["responses"]["Error"];
             401: components["responses"]["Error"];
+            409: components["responses"]["IdempotencyKeyReused"];
+            default: components["responses"]["Error"];
+        };
+    };
+    createMachineEnrollmentChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MachineEnrollmentInput"];
+            };
+        };
+        responses: {
+            /** @description A newly created enrollment challenge. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineChallenge"];
+                };
+            };
+            400: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    enrollMachineWorkspace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MachineProofInput"];
+            };
+        };
+        responses: {
+            /** @description The original enrollment result was replayed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineEnrollmentResult"];
+                };
+            };
+            /** @description A workspace was newly allocated and a credential issued. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineEnrollmentResult"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    createMachineCredentialRotationChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MachineRotationInput"];
+            };
+        };
+        responses: {
+            /** @description A newly created credential rotation challenge. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineChallenge"];
+                };
+            };
+            400: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    rotateMachineCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MachineProofInput"];
+            };
+        };
+        responses: {
+            /** @description The original rotation result was replayed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineRotationResult"];
+                };
+            };
+            /** @description A new machine credential was issued. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineRotationResult"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    inspectMachineCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MachineProofInput"];
+            };
+        };
+        responses: {
+            /** @description Current machine credential metadata. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineCredentialMetadata"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            429: components["responses"]["Error"];
             default: components["responses"]["Error"];
         };
     };
