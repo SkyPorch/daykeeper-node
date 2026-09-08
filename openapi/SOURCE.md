@@ -1,14 +1,22 @@
 # Contract source
 
 `daykeeper.yaml` is an exact, byte-for-byte copy of `openapi/daykeeper.yaml`
-from `SkyPorch/daykeeper-openapi`, tag `v1.1.0`, commit
-`c9a0175d0053f1a2d57c9329f6d3a36ec6acdb71`.
+from `SkyPorch/daykeeper-openapi`, merged commit
+`ea6a59943f4ef01be16cef019b704f9e818ad817` (not yet tagged or released).
 
-- SHA-256: `26230df75f0faf7f4a6625597a9acde4c36229ed570a8ff6f0d56f83a1939f65`
-- Git blob: `38ea135713b1a27cb5d9069dd7a83d88f39f43fc`
-- Tag status: immutable upstream release tag.
+- SHA-256: `3cc8ca488104498edbb734aab6cc7d2d61dc6d8e99d8e1e4404cd4838154ce8a`
+- Git blob: `d4278b9ffb6f3377e43a90b69ec6c7a198ed1501`
 
 There is no local delta. This repository does not modify the vendored contract.
+
+The upstream change widens `EntitlementPolicy.plan` to the existing supported
+`free`, `pro`, and `scale` values. It does not change the response shape or
+make billing/traffic capability claims.
+
+The same commit repairs the strict `TenantProvisioningEntitlement.oneOf`
+examples by repeating the complete object properties in each branch. This
+keeps `additionalProperties: false` while making the canonical examples
+validate against the schema.
 
 ## What this snapshot adds over the released baseline
 
@@ -58,6 +66,6 @@ are required for activation. The new SDK methods need the corresponding reviewed
 server version; older servers remain compatible with existing account-only
 methods.
 
-Release provenance records the immutable `daykeeper-openapi` tag and full
-commit SHA above. CI regenerates TypeScript declarations and fails when the
-committed output differs.
+The source commit above is merged upstream but is not a `daykeeper-openapi`
+release tag. CI verifies the documented checksums, regenerates TypeScript
+declarations, and fails when the committed output differs.

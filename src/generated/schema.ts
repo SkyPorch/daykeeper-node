@@ -37,10 +37,10 @@ export interface paths {
          *
          *     Unconfigured, revoked, and exhausted assignments are successful status
          *     reads, not HTTP policy errors. This read neither assigns an entitlement
-         *     nor reserves capacity. The one-tenant free-2026-08-31 policy is a
-         *     provisional provisioning safeguard, not approved marketing pricing or
-         *     general free-tier activation. The legacy metering fields describe this
-         *     admission-only contract, not optional provider enforcement. Use /v1/usage
+         *     nor reserves capacity. The returned policy is a provisioning safeguard,
+         *     not approved marketing pricing or general tier activation. The legacy
+         *     metering fields describe this admission-only contract, not optional
+         *     provider enforcement. Use /v1/usage
          *     for recorded resource counters; neither read proves traffic readiness.
          */
         get: operations["getEntitlements"];
@@ -1027,11 +1027,12 @@ export interface components {
             [key: string]: unknown;
         };
         /**
-         * @description Immutable, versioned internal admission policy. The current
-         *     free-2026-08-31 policy permits one persisted tenant per organization.
-         *     That allowance is provisional, not approved pricing or a promise of
-         *     message, storage, channel, signup, or billing capabilities. Read the
-         *     returned tenantLimit rather than hardcoding the current example value.
+         * @description Immutable, versioned internal admission policy. The current immutable
+         *     policy permits a bounded number of persisted
+         *     tenants per organization. Free and paid policy plans are represented
+         *     here for admission reporting; this field is not a billing entitlement
+         *     or a promise of provider capabilities. Read the returned tenantLimit
+         *     rather than hardcoding the current example value.
          */
         EntitlementPolicy: {
             /**
@@ -1039,8 +1040,8 @@ export interface components {
              * @example free-2026-08-31
              */
             version: string;
-            /** @constant */
-            plan: "free";
+            /** @enum {string} */
+            plan: "free" | "pro" | "scale";
             /** @constant */
             provisional: true;
             /** @example 1 */
@@ -1086,12 +1087,22 @@ export interface components {
             denial: components["schemas"]["TenantAdmissionDenial"] | null;
         } & ({
             /** @constant */
-            allowed?: true;
-            denial?: null;
+            enforced: true;
+            /** @constant */
+            allowed: true;
+            used: number;
+            limit: number | null;
+            remaining: number | null;
+            denial: null;
         } | {
             /** @constant */
-            allowed?: false;
-            denial?: components["schemas"]["TenantAdmissionDenial"];
+            enforced: true;
+            /** @constant */
+            allowed: false;
+            used: number;
+            limit: number | null;
+            remaining: number | null;
+            denial: components["schemas"]["TenantAdmissionDenial"];
         });
         EntitlementStatus: {
             /**
