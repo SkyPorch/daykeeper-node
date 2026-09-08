@@ -1,14 +1,17 @@
 # Contract source
 
 `daykeeper.yaml` is an exact, byte-for-byte copy of `openapi/daykeeper.yaml`
-from `SkyPorch/daykeeper-openapi`, tag `v1.1.0`, commit
-`c9a0175d0053f1a2d57c9329f6d3a36ec6acdb71`.
+from `SkyPorch/daykeeper-openapi`, commit
+`291e6f7581913dbb7a24fbd3a233cb602623e272`.
 
-- SHA-256: `26230df75f0faf7f4a6625597a9acde4c36229ed570a8ff6f0d56f83a1939f65`
-- Git blob: `38ea135713b1a27cb5d9069dd7a83d88f39f43fc`
-- Tag status: immutable upstream release tag.
+- SHA-256: `8486c8e63909c5051daa58bd0204d3e5493e691e042a62817570b7a3477cd6f5`
+- Git blob: `f044295425c32c92587143c2b80241b93ee36889`
 
 There is no local delta. This repository does not modify the vendored contract.
+
+The upstream change widens `EntitlementPolicy.plan` to the existing supported
+`free`, `pro`, and `scale` values. It does not change the response shape or
+make billing/traffic capability claims.
 
 ## What this snapshot adds over the released baseline
 
