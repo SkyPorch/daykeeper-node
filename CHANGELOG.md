@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.1
+
+- Correct entitlement policy types to include the existing `pro` and `scale`
+  server responses alongside `free`. Runtime request behavior is unchanged.
+  TypeScript consumers that assumed `plan` was always `"free"` must handle the
+  paid values too; compilation may now expose that earlier unsafe assumption.
+- Correct the provisioning entitlement schema's allowed/denied branches while
+  retaining their strict object validation.
+- Verify vendored contract SHA-256 and Git blob checksums in the test suite.
+
 ## 0.2.0
 
 - Add API-only inbox desired state (`inbox: { type: "api" }`) and

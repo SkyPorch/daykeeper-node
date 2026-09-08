@@ -1,11 +1,11 @@
 # Contract source
 
 `daykeeper.yaml` is an exact, byte-for-byte copy of `openapi/daykeeper.yaml`
-from `SkyPorch/daykeeper-openapi`, merged commit
-`ea6a59943f4ef01be16cef019b704f9e818ad817` (not yet tagged or released).
+from `SkyPorch/daykeeper-openapi`, tag `v1.2.0`, commit
+`3140bbab0b683371ee1b1c17ff8db67a9ae1fa68`.
 
-- SHA-256: `3cc8ca488104498edbb734aab6cc7d2d61dc6d8e99d8e1e4404cd4838154ce8a`
-- Git blob: `d4278b9ffb6f3377e43a90b69ec6c7a198ed1501`
+- SHA-256: `eb0294f1039f37c27e8b6426106fca21ee8cc4256291f6239ab3f529d9c1114d`
+- Git blob: `f79cdb66fa6fe088bac91eedcfc5cdf2505b0727`
 
 There is no local delta. This repository does not modify the vendored contract.
 
@@ -66,6 +66,6 @@ are required for activation. The new SDK methods need the corresponding reviewed
 server version; older servers remain compatible with existing account-only
 methods.
 
-The source commit above is merged upstream but is not a `daykeeper-openapi`
-release tag. CI verifies the documented checksums, regenerates TypeScript
+The source commit above is pinned by the immutable `daykeeper-openapi`
+release tag `v1.2.0`. CI verifies the documented checksums, regenerates TypeScript
 declarations, and fails when the committed output differs.
