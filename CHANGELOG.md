@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0 (unreleased)
+## 0.2.0
 
 - Add API-only inbox desired state (`inbox: { type: "api" }`) and
   `inboxes.get(tenantId)`. Matching server capabilities are required. Preparation
@@ -40,8 +40,8 @@
   cookies, authorization headers, redirects, or automatic retries are used.
 - Add a dependency-free WebCrypto ES256 machine owner signer with explicit key
   export, pinned audiences, and intent-bound proofs. Private keys and reveal-once
-  credentials remain caller-managed secrets. These APIs are unreleased and do
-  not enable hosted signup or customer traffic on their own.
+  credentials remain caller-managed secrets. These APIs do not enable hosted
+  signup or customer traffic on their own.
 
 - Require an explicit `idempotencyKey` on `flows.create`, `flows.createVersion`
   and `flows.publishVersion`, send it as `Idempotency-Key`, and expose
@@ -88,7 +88,7 @@
 - Rewrite published source map `sources` so they stay inside `dist` instead of
   pointing at an unpublished `../src`. The original text was already embedded in
   `sourcesContent`, so debugger behavior improves and nothing is lost.
-- Record the exact unreleased canonical contract snapshot. Existing account-only
+- Record the exact canonical contract snapshot. Existing account-only
   and customer-session methods retain their paths and behavior.
 
 ## 0.1.1
