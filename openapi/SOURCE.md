@@ -1,24 +1,15 @@
 # Contract source
 
 `daykeeper.yaml` is an exact, byte-for-byte copy of `openapi/daykeeper.yaml`
-from `SkyPorch/daykeeper-openapi`, **unreleased** contract `1.3.0` candidate on
-branch `codex/workspace-claims-contract`, commit
-`a3bcae09536085e2308f479a110da6d1ac3f9362`.
+from `SkyPorch/daykeeper-openapi`, release tag `v1.3.0`, commit
+`067465edfc6c94e63867a6dd0d9db02e12683877`.
 
 - SHA-256: `3ecf230c04dc17fae561baf2b0df951c5bd5050c336adba2f06c177514edadd1`
 - Git blob: `f4f90ebd91e8bb641918f63af4862c83f81a289a`
 
-This re-vendors the same branch again, after reconciling the contract with the
-reviewed server: commit `a3bcae09536085e2308f479a110da6d1ac3f9362` replaces
-`88f921a3c9b97ab789a018399002b559b766c30b`, which had replaced
-`fb205e6380755cff40441e434e36e935e8d1b48c`.
-
-**This is a branch head, not a release tag.** `RELEASING.md` step 2 forbids a
-branch head in a release, so `@skyporch/daykeeper` 0.3.0 must not be published
-from this pin. When `daykeeper-openapi` merges the contract and creates the
-immutable `v1.3.0` tag, the release pull request re-vendors from that tag and
-updates the tag name, commit, SHA-256, and Git blob above. The bytes are not
-expected to change, but the checksums are re-verified rather than assumed.
+The tag was created on the squash-merge commit of the reviewed contract pull
+request; the bytes match the reconciled branch head exactly, and the SHA-256
+and Git blob above were re-verified against the tag.
 
 There is no local delta. This repository does not modify the vendored contract.
 

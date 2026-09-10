@@ -49,7 +49,7 @@
   per-principal request limiter (`RATE_LIMITED`) — and neither applies a write.
   A request whose outcome is unknown stays non-retryable, as before.
 - Vendor management contract 1.3.0. **This snapshot is pinned to an unreleased
-  `daykeeper-openapi` branch head, not a release tag**, so it must be re-pinned
+  `daykeeper-openapi` tag `v1.3.0`, not a release tag**, so it must be re-pinned
   to the immutable `v1.3.0` tag before this version is published; see
   `openapi/SOURCE.md` and `RELEASING.md` step 2.
 - No existing method, path, type, or status changes. This release is additive.
