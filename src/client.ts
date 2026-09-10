@@ -39,6 +39,10 @@ import type {
   OperatorConversationList,
   OperatorConversationMessages,
   OperatorConversationReply,
+  WorkspaceClaim,
+  WorkspaceClaimList,
+  WorkspaceClaimResult,
+  CreateWorkspaceClaimInput,
 } from "./types.js";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -54,6 +58,8 @@ const ALLOWED_PATHS: readonly RegExp[] = [
   "/v1/usage",
   "/v1/agent-credentials",
   `/v1/agent-credentials/${SEGMENT}/revoke`,
+  "/v1/workspace-claims",
+  `/v1/workspace-claims/${SEGMENT}/revoke`,
   "/v1/tenant-plans",
   "/v1/tenants",
   "/v1/tenants:apply",
@@ -165,6 +171,23 @@ export class DaykeeperClient {
       credentialId: string,
       options?: DaykeeperRequestOptions,
     ) => Promise<RevokeAgentCredentialResult>;
+  };
+  readonly workspaceClaims: {
+    /**
+     * Issue an owner claim for the machine bearer's own workspace. The result
+     * carries `token` and `claimUrl` exactly once; a replay of the exact same
+     * request under the same key returns both as null with `replayed: true`.
+     * The claim URL is a secret handoff: never log or persist it.
+     */
+    create: (
+      input: CreateWorkspaceClaimInput,
+      options: DaykeeperIdempotencyOptions,
+    ) => Promise<WorkspaceClaimResult>;
+    list: (options?: DaykeeperRequestOptions) => Promise<WorkspaceClaimList>;
+    revoke: (
+      claimId: string,
+      options?: DaykeeperRequestOptions,
+    ) => Promise<WorkspaceClaim>;
   };
   readonly websiteChannels: {
     get: (
@@ -345,6 +368,26 @@ export class DaykeeperClient {
             signal: requestOptions.signal,
           },
         ),
+    };
+    this.workspaceClaims = {
+      create: (input, requestOptions) =>
+        this.#request("/v1/workspace-claims", {
+          method: "POST",
+          body: validateWorkspaceClaimInput(input),
+          idempotencyKey: requestOptions?.idempotencyKey,
+          requireIdempotencyKey: true,
+          signal: requestOptions?.signal,
+        }),
+      list: (requestOptions = {}) =>
+        this.#request("/v1/workspace-claims", {
+          signal: requestOptions.signal,
+        }),
+      revoke: (claimId, requestOptions = {}) =>
+        this.#request(`/v1/workspace-claims/${pathSegment(claimId)}/revoke`, {
+          method: "POST",
+          body: {},
+          signal: requestOptions.signal,
+        }),
     };
     this.websiteChannels = {
       get: (tenantId, requestOptions = {}) =>
@@ -817,6 +860,29 @@ function validateDomainVerificationInput(
   )
     throw configurationError("A valid domain verification origin is required");
   return { origin: value.origin };
+}
+
+// The contract accepts a lowercased address of at most 254 characters that
+// contains an "@". Reject anything else locally so a typo never consumes an
+// hourly claim window or binds an idempotency key to a request the server
+// would refuse anyway.
+const CLAIM_EMAIL_PATTERN = /^[^A-Z@\s]+@[^A-Z@\s]+$/;
+
+function validateWorkspaceClaimInput(
+  value: CreateWorkspaceClaimInput,
+): CreateWorkspaceClaimInput {
+  if (
+    !value ||
+    Object.keys(value).sort().join(",") !== "email" ||
+    typeof value.email !== "string" ||
+    value.email.length > 254 ||
+    !CLAIM_EMAIL_PATTERN.test(value.email)
+  ) {
+    throw configurationError(
+      "A workspace claim requires a lowercased email address of 1 through 254 characters containing @",
+    );
+  }
+  return { email: value.email };
 }
 
 function isIpLiteral(hostname: string): boolean {

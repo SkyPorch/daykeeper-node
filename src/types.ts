@@ -24,6 +24,14 @@ export type CreateAgentCredentialResult =
   Schemas["CreateAgentCredentialResult"];
 export type RevokeAgentCredentialResult =
   Schemas["RevokeAgentCredentialResult"];
+export type WorkspaceClaim = Schemas["WorkspaceClaim"];
+export type WorkspaceClaimState = Schemas["WorkspaceClaim"]["state"];
+export type CreateWorkspaceClaimInput = Schemas["CreateWorkspaceClaimInput"];
+/** A workspace claim result. `token` and `claimUrl` are non-null only on the
+ * original successful response; a replay returns both as null with
+ * `replayed: true`. Never log or persist either value. */
+export type WorkspaceClaimResult = Schemas["WorkspaceClaimResult"];
+export type WorkspaceClaimList = Schemas["WorkspaceClaimList"];
 export type DomainVerification = Schemas["DomainVerification"];
 export type DomainVerificationInput = Schemas["DomainVerificationInput"];
 export type MachinePublicKey = Schemas["MachinePublicKey"];

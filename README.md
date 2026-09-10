@@ -353,11 +353,53 @@ customer lifecycle, or erasure. These SDK methods are available in 0.2.0 and
 later and require a server with `capabilities.agentCredentials.enabled`.
 Server enablement remains deployment-controlled.
 
+## Workspace claims (0.3.0+)
+
+An agent that created a workspace with a machine-owner credential can hand it to
+a person as owner. All three methods require a `dk_machine_` bearer; a human
+bearer or a delegated agent credential is rejected with `SCOPE_NOT_HELD` (403).
+
+```ts
+const result = await daykeeper.workspaceClaims.create(
+  { email: "gabriel@acme.com" },
+  { idempotencyKey: generateIdempotencyKey() },
+);
+
+if (result.claimUrl) {
+  // Hand this URL to the person once, out of band. It is a secret: the token
+  // rides in the URL fragment, so never log it, store it, or put it in a
+  // command line, an issue, or a chat transcript. Daykeeper sends no email.
+}
+```
+
+A fresh claim answers `201` with `replayed: false`, `token` and `claimUrl`. An
+exact repeat under the same key answers `200` with `replayed: true` and both
+fields `null`: the claim still exists, but the URL cannot be recovered. To
+reissue, revoke the pending claim and create a new one under a new key.
+
+`workspaceClaims.list()` returns pending and accepted claims without tokens;
+expired claims are hidden. `workspaceClaims.revoke(claimId)` is safe to repeat
+and returns the claim in state `revoked`.
+
+The address must be lowercased, at most 254 characters, and contain `@`; the SDK
+refuses anything else locally, before an idempotency key is bound or an hourly
+claim window is consumed. Documented server rejections are
+`INVITATION_ALREADY_PENDING` and `ALREADY_A_MEMBER` (409), `RATE_LIMITED` (429),
+and `FEATURE_UNAVAILABLE` (503) when no console origin is configured. Check
+`capabilities().workspaceClaims` before offering the flow. If a create fails
+without a response it is reported as `outcomeUnknown`: inspect
+`workspaceClaims.list()` and repeat only the exact original request with the same
+key. Never create a second claim as an automatic retry.
+
+Accepting a claim does not demote the machine owner; the agent keeps its
+credential and keeps working.
+
 ## API groups
 
 - `capabilities()`
 - `entitlements.get`
 - `agentCredentials.list`, `agentCredentials.create`, `agentCredentials.revoke`
+- `workspaceClaims.create`, `workspaceClaims.list`, `workspaceClaims.revoke`
 - `websiteChannels.get`
 - `inboxes.get`
 - `tenants.plan`, `tenants.apply`, `tenants.list`, `tenants.get`

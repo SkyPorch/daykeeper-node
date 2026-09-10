@@ -924,6 +924,90 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/workspace-claims": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the current organization's workspace claims
+         * @description Requires a machine-owner credential with daykeeper.accounts:read. The
+         *     organization comes only from the verified machine owner; no
+         *     organization, pagination, or filter selector is accepted. Pending and
+         *     accepted claims are returned; expired claims are hidden, as in the
+         *     existing invitation list. Tokens and claim URLs are never returned by
+         *     this read.
+         */
+        get: operations["listWorkspaceClaims"];
+        put?: never;
+        /**
+         * Create or replay a workspace ownership claim
+         * @description Issues an owner invitation for the authenticated machine owner's own
+         *     organization and returns the claim together with a single-use token and
+         *     a console claim URL. Requires a machine-owner credential with
+         *     daykeeper.accounts:write. Human bearers and delegated agent credentials
+         *     are rejected with SCOPE_NOT_HELD (403); there is no organization
+         *     selector.
+         *
+         *     Requires an Idempotency-Key header. A fresh application answers 201 with
+         *     `replayed: false` and reveals `token` and `claimUrl` exactly once. An
+         *     exact repeat under the same key answers 200 with `replayed: true` and
+         *     both `token` and `claimUrl` null; no secret can be recovered. Revoke the
+         *     pending claim and create a new one to reissue a lost URL.
+         *
+         *     One pending claim exists per email per organization. A different intent
+         *     for the same address while a claim is pending is rejected with
+         *     INVITATION_ALREADY_PENDING (409); an address that already holds a
+         *     membership is rejected with ALREADY_A_MEMBER (409); the hourly window
+         *     answers RATE_LIMITED (429); a malformed address or idempotency key is
+         *     rejected with INVALID_INPUT (400).
+         *
+         *     Daykeeper sends no email. The claim URL carries the token in its
+         *     fragment so it never reaches server logs or referrers; it is a secret,
+         *     it is shown once, and the agent delivers it out of band.
+         *
+         *     When a request fails without a usable response its outcome is unknown.
+         *     Repeat it with the same key and the exact original body to learn what
+         *     happened; do not retry an uncertain mutation under a new key. The Node
+         *     SDK surfaces this state as `outcomeUnknown` on the raised error and will
+         *     not retry it automatically. All responses, including errors, are not
+         *     cacheable.
+         */
+        post: operations["createWorkspaceClaim"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/workspace-claims/{claimId}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                claimId: components["parameters"]["WorkspaceClaimId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke a workspace ownership claim
+         * @description Requires a machine-owner credential with daykeeper.accounts:write and
+         *     accepts no customer configuration. Revocation invalidates the claim's
+         *     token and is safe to repeat: a repeat returns the same revoked claim. It
+         *     never creates, replaces, recovers, or returns a token or claim URL. A
+         *     claim belonging to another organization is not disclosed.
+         */
+        post: operations["revokeWorkspaceClaim"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1017,6 +1101,14 @@ export interface components {
                 /** @constant */
                 maximumValidityDays: 90;
             };
+            /**
+             * @description Optional on older servers. True when the management API can issue
+             *     workspace ownership claims. False when the console origin setting is
+             *     absent, in which case the claim routes answer FEATURE_UNAVAILABLE
+             *     (503). Absent means the server predates workspace claims. Enabled
+             *     discovery does not grant machine-owner authority or account scopes.
+             */
+            workspaceClaims?: boolean;
             flows: {
                 /** @constant */
                 schemaVersion: "2026-08-01";
@@ -1741,6 +1833,56 @@ export interface components {
             credential: components["schemas"]["AgentCredential"];
             replayed: boolean;
         };
+        /**
+         * @description An owner invitation issued by a machine owner. It reuses the existing
+         *     invitation lifecycle: single use, email-match on acceptance, and a
+         *     bounded expiry. Accepting it never demotes the machine owner.
+         */
+        WorkspaceClaim: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: uuid
+             * @description Organization derived from the authenticated machine owner.
+             */
+            organizationId: string;
+            /** @description Lowercased address that must sign in to accept this claim. */
+            email: string;
+            /** @constant */
+            role: "owner";
+            /**
+             * @description Expired claims are hidden from the list rather than reported as a state.
+             * @enum {string}
+             */
+            state: "pending" | "accepted" | "revoked";
+            /** Format: date-time */
+            expiresAt: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        CreateWorkspaceClaimInput: {
+            /**
+             * @description Lowercased address that must accept the claim. Daykeeper sends no
+             *     email; the caller delivers the returned claim URL out of band.
+             */
+            email: string;
+        };
+        /** @description A fresh result has a token and claim URL with replayed false; a replay has both null and replayed true. */
+        WorkspaceClaimResult: {
+            claim: components["schemas"]["WorkspaceClaim"];
+            /** @description Sensitive single-use invitation token revealed only on the original successful response. Never log or persist it outside a secret manager. */
+            token: string | null;
+            /**
+             * @description Sensitive one-time handoff URL built from the console origin. The
+             *     token is carried in the fragment so it never reaches server logs or
+             *     referrers. Revealed only on the original successful response.
+             */
+            claimUrl: string | null;
+            replayed: boolean;
+        };
+        WorkspaceClaimList: {
+            items: components["schemas"]["WorkspaceClaim"][];
+        };
         /** @enum {string} */
         DaykeeperScope: "daykeeper.accounts:read" | "daykeeper.accounts:write" | "daykeeper.billing:read" | "daykeeper.credentials:read" | "daykeeper.credentials:write" | "daykeeper.flows:read" | "daykeeper.flows:write" | "daykeeper.flows:publish" | "daykeeper.provisioning:read" | "daykeeper.provisioning:apply" | "daykeeper.customer-sessions:write" | "daykeeper.lifecycle:write" | "daykeeper.customers:delete" | "daykeeper.conversations:read" | "daykeeper.conversations:write";
         ErrorDetail: {
@@ -1780,6 +1922,15 @@ export interface components {
         };
         RevokeAgentCredentialResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["RevokeAgentCredentialResult"];
+        };
+        WorkspaceClaimResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["WorkspaceClaim"];
+        };
+        WorkspaceClaimResultResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["WorkspaceClaimResult"];
+        };
+        WorkspaceClaimListResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["WorkspaceClaimList"];
         };
         TenantPlanResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["TenantPlan"];
@@ -1942,6 +2093,29 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
+        /** @description Workspace claim error; never cache this response. */
+        WorkspaceClaimError: {
+            headers: {
+                "Cache-Control"?: "no-store";
+                "X-Request-Id"?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description Workspace claim creation is bounded by an hourly window; do not retry an uncertain write automatically. */
+        WorkspaceClaimRateLimited: {
+            headers: {
+                "Cache-Control"?: "no-store";
+                "Retry-After"?: number;
+                "X-Request-Id"?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
     };
     parameters: {
         /**
@@ -1961,6 +2135,7 @@ export interface components {
         FlowVersionNumber: number;
         AgentCredentialId: string;
         DomainVerificationId: string;
+        WorkspaceClaimId: string;
     };
     requestBodies: never;
     headers: never;
@@ -3328,6 +3503,135 @@ export interface operations {
             401: components["responses"]["Error"];
             429: components["responses"]["Error"];
             default: components["responses"]["Error"];
+        };
+    };
+    listWorkspaceClaims: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pending and accepted claims for the authenticated organization. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    "X-Request-Id"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceClaimListResponse"];
+                };
+            };
+            400: components["responses"]["WorkspaceClaimError"];
+            401: components["responses"]["WorkspaceClaimError"];
+            /** @description A human bearer or agent credential was used (SCOPE_NOT_HELD). */
+            403: components["responses"]["WorkspaceClaimError"];
+            429: components["responses"]["WorkspaceClaimRateLimited"];
+            /** @description The console origin is not configured, so claims are not enabled (FEATURE_UNAVAILABLE). */
+            503: components["responses"]["WorkspaceClaimError"];
+            default: components["responses"]["WorkspaceClaimError"];
+        };
+    };
+    createWorkspaceClaim: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description A caller-generated key reused only for an exact logical mutation. The
+                 *     key is bound to the request the first time it is applied. Repeating that
+                 *     exact request with the same key returns the stored original result
+                 *     instead of writing again, and the operation reports the repeat as a
+                 *     replay. Reusing the key for a different request is rejected and no write
+                 *     is applied. A missing or malformed key is rejected with INVALID_INPUT
+                 *     (400). Use the same key to reconcile a request whose outcome is unknown;
+                 *     do not retry an uncertain mutation under a new key.
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateWorkspaceClaimInput"];
+            };
+        };
+        responses: {
+            /** @description The exact original request was replayed; the token and claim URL are no longer available. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    "X-Request-Id"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceClaimResultResponse"];
+                };
+            };
+            /** @description A claim was created and its token and claim URL are revealed exactly once. */
+            201: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    "X-Request-Id"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceClaimResultResponse"];
+                };
+            };
+            /** @description The address or the Idempotency-Key header is malformed (INVALID_INPUT). */
+            400: components["responses"]["WorkspaceClaimError"];
+            401: components["responses"]["WorkspaceClaimError"];
+            /** @description A human bearer or agent credential was used (SCOPE_NOT_HELD). */
+            403: components["responses"]["WorkspaceClaimError"];
+            /** @description INVITATION_ALREADY_PENDING, ALREADY_A_MEMBER, or IDEMPOTENCY_KEY_REUSED; no write was applied. */
+            409: components["responses"]["WorkspaceClaimError"];
+            429: components["responses"]["WorkspaceClaimRateLimited"];
+            /** @description The console origin is not configured, so claims are not enabled (FEATURE_UNAVAILABLE). */
+            503: components["responses"]["WorkspaceClaimError"];
+            default: components["responses"]["WorkspaceClaimError"];
+        };
+    };
+    revokeWorkspaceClaim: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                claimId: components["parameters"]["WorkspaceClaimId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmptyObject"];
+            };
+        };
+        responses: {
+            /** @description The claim is revoked, including an idempotent repeat. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    "X-Request-Id"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceClaimResponse"];
+                };
+            };
+            400: components["responses"]["WorkspaceClaimError"];
+            401: components["responses"]["WorkspaceClaimError"];
+            /** @description A human bearer or agent credential was used (SCOPE_NOT_HELD). */
+            403: components["responses"]["WorkspaceClaimError"];
+            404: components["responses"]["WorkspaceClaimError"];
+            /** @description The claim was already accepted and cannot be revoked (RESOURCE_CONFLICT). */
+            409: components["responses"]["WorkspaceClaimError"];
+            429: components["responses"]["WorkspaceClaimRateLimited"];
+            /** @description The console origin is not configured, so claims are not enabled (FEATURE_UNAVAILABLE). */
+            503: components["responses"]["WorkspaceClaimError"];
+            default: components["responses"]["WorkspaceClaimError"];
         };
     };
 }

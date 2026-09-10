@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.3.0 (unreleased)
+
+- Add the `workspaceClaims` namespace, so an agent that created a workspace can
+  hand it to a person as owner: `workspaceClaims.create({ email }, { idempotencyKey })`,
+  `workspaceClaims.list()` and `workspaceClaims.revoke(claimId)`. All three
+  require a `dk_machine_` machine-owner bearer; a human bearer or a delegated
+  agent credential is rejected by the server with `SCOPE_NOT_HELD` (403), which
+  the SDK surfaces unchanged.
+- `workspaceClaims.create` requires an explicit `idempotencyKey`, exactly like
+  `agentCredentials.create`. A fresh result carries `token` and `claimUrl` and
+  `replayed: false`; a replay of the exact same request under the same key
+  carries `token: null`, `claimUrl: null` and `replayed: true`. The claim URL is
+  a one-time secret that carries its token in the URL fragment: deliver it out
+  of band, and never log or persist it. Daykeeper sends no email.
+- The SDK rejects a malformed claim address locally (lowercased, at most 254
+  characters, must contain `@`) before an idempotency key is bound or an hourly
+  claim window is consumed. A create whose response is lost is reported as
+  `outcomeUnknown` and is never retried automatically; repeat it with the same
+  key, or inspect `workspaceClaims.list()` first.
+- Add the `WorkspaceClaim`, `WorkspaceClaimState`, `CreateWorkspaceClaimInput`,
+  `WorkspaceClaimResult` and `WorkspaceClaimList` types, and the optional
+  `capabilities().workspaceClaims` boolean. It is `false` when the server has no
+  console origin configured, in which case the routes answer
+  `FEATURE_UNAVAILABLE` (503); it is absent on servers that predate claims.
+- Vendor management contract 1.3.0. **This snapshot is pinned to an unreleased
+  `daykeeper-openapi` branch head, not a release tag**, so it must be re-pinned
+  to the immutable `v1.3.0` tag before this version is published; see
+  `openapi/SOURCE.md` and `RELEASING.md` step 2.
+- No existing method, path, type, or status changes. This release is additive.
+
 ## 0.2.1
 
 - Correct entitlement policy types to include the existing `pro` and `scale`
