@@ -121,7 +121,6 @@ are required for activation. The new SDK methods need the corresponding reviewed
 server version; older servers remain compatible with existing account-only
 methods.
 
-The source commit above is an unreleased `daykeeper-openapi` branch head, not an
-immutable release tag; see the note at the top of this file. CI verifies the
-documented checksums, regenerates TypeScript declarations, and fails when the
-committed output differs.
+The source above is the immutable `v1.3.0` tag, so this pin satisfies
+`RELEASING.md` step 2 for the 0.3.0 release.
+
