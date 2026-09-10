@@ -436,6 +436,14 @@ failures, invalid responses, and local configuration errors. Both carry
 `outcomeUnknown`, which is true only when a mutation may already have been
 applied.
 
+A `429` is always retryable and applies no write, whichever code carries it:
+workspace claim creation is bounded both by an hourly claim window, which
+answers `INVITATION_LIMIT_REACHED`, and by the generic per-address and
+per-principal request limits, which answer `RATE_LIMITED`. When the response
+carries a `Retry-After` header the SDK can read as a whole number of seconds,
+`DaykeeperApiError.retryAfterSeconds` reports it; an HTTP-date or an
+out-of-range value leaves it `undefined`, and you choose your own backoff.
+
 ## Deadlines and cancellation
 
 `timeoutMs` defaults to 30 seconds (allowed range: 1–60 seconds). It is one

@@ -3,13 +3,14 @@
 `daykeeper.yaml` is an exact, byte-for-byte copy of `openapi/daykeeper.yaml`
 from `SkyPorch/daykeeper-openapi`, **unreleased** contract `1.3.0` candidate on
 branch `codex/workspace-claims-contract`, commit
-`88f921a3c9b97ab789a018399002b559b766c30b`.
+`a3bcae09536085e2308f479a110da6d1ac3f9362`.
 
-- SHA-256: `eefa7b061ba38f5b58754a60479c87899350dd5a04d1ca7ae43a9f2de1edbbc4`
-- Git blob: `96becdb8285fce8e0ea3180ef57396c663193f43`
+- SHA-256: `3ecf230c04dc17fae561baf2b0df951c5bd5050c336adba2f06c177514edadd1`
+- Git blob: `f4f90ebd91e8bb641918f63af4862c83f81a289a`
 
-This re-vendors the same branch after its review fixes: commit
-`88f921a3c9b97ab789a018399002b559b766c30b` replaces
+This re-vendors the same branch again, after reconciling the contract with the
+reviewed server: commit `a3bcae09536085e2308f479a110da6d1ac3f9362` replaces
+`88f921a3c9b97ab789a018399002b559b766c30b`, which had replaced
 `fb205e6380755cff40441e434e36e935e8d1b48c`.
 
 **This is a branch head, not a release tag.** `RELEASING.md` step 2 forbids a
@@ -32,8 +33,33 @@ and reveals `token` and `claimUrl` exactly once; a replay returns both as
 `null`. Every addition is additive and optional, so `info.version` moves from
 `1.2.0` to `1.3.0` under the upstream `VERSIONING.md`.
 
-The review fixes carried by this re-vendor, all within the same unreleased
-`1.3.0`: the two success bodies of `createWorkspaceClaim` are now
+The reconciliation fixes carried by this re-vendor, all within the same
+unreleased `1.3.0`, settle four disagreements between the contract, the
+reviewed server and this SDK:
+
+`WorkspaceClaim` gains `acceptedAt` and `revokedAt`, required and nullable
+date-times. The server has always emitted both, and `additionalProperties:
+false` without them made every real response invalid against the contract.
+They are required rather than optional so a client never has to tell "absent"
+apart from "has not happened yet"; the regenerated types make both non-optional
+`string | null`.
+
+429 has two mechanisms behind it. The hourly claim window answers
+`INVITATION_LIMIT_REACHED`, the existing invitation code the server raises; the
+generic per-address and per-principal request limiters answer `RATE_LIMITED`
+with `Retry-After`. Both are named in the contract now, and this SDK treats
+either as retryable and reports the interval as `retryAfterSeconds` on the
+raised error when the header is a readable delay.
+
+`IDEMPOTENCY_KEY_REUSED`, `ORGANIZATION_ACCESS_REQUIRED` on every 403, and
+`RESOURCE_NOT_FOUND` on revoke's 404 are documented where the server emits
+them; revoke's 409 is `RESOURCE_STATE_CONFLICT`, the code the server actually
+raises, not the `RESOURCE_CONFLICT` the contract had invented.
+
+The list carries pending, accepted and revoked claims, newest first, with only
+an expired pending claim hidden. That is what the server's filter already does.
+
+The earlier review fixes, also within `1.3.0`: the two success bodies of `createWorkspaceClaim` are now
 status-specific, `WorkspaceClaimCreated` for `201` and `WorkspaceClaimReplayed`
 for `200`, with `WorkspaceClaimResult` kept as their `oneOf` so the SDK still
 has one result type; `WorkspaceClaimList.items` lost its `maxItems: 100`, which

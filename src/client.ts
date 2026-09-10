@@ -1008,12 +1008,18 @@ function apiError(response: Response, payload: unknown): DaykeeperApiError {
     message:
       boundedString(body.message, MAX_MESSAGE_LENGTH) ??
       "The Daykeeper API rejected the request",
+    // 429 is retryable whichever code carries it. Claim creation has two
+    // limits behind that status, the hourly claim window
+    // (INVITATION_LIMIT_REACHED) and the generic request limiter
+    // (RATE_LIMITED), and neither applied a write. The status settles it, so a
+    // body that says otherwise does not make the caller give up for good.
+    // An unknown outcome still wins: DaykeeperApiError clears retryable there.
     retryable:
-      typeof body.retryable === "boolean"
+      response.status === 429 ||
+      (typeof body.retryable === "boolean"
         ? body.retryable
-        : response.status === 408 ||
-          response.status === 429 ||
-          response.status >= 500,
+        : response.status === 408 || response.status >= 500),
+    retryAfterSeconds: retryAfterSeconds(response.headers.get("retry-after")),
     nextActions: stringArray(body.nextActions),
     correlationId:
       boundedString(body.correlationId, MAX_CORRELATION_ID_LENGTH) ??
@@ -1021,6 +1027,18 @@ function apiError(response: Response, payload: unknown): DaykeeperApiError {
     fields: stringArray(body.fields),
     outcomeUnknown: body.outcomeUnknown === true,
   });
+}
+
+// Retry-After as the contract declares it: a whole number of seconds, at least
+// one. RFC 9110 also allows an HTTP-date, and a proxy may send one; that form
+// is dropped rather than converted, because turning it into a duration needs a
+// trusted clock and a wrong one would hand the caller a made-up number. A day
+// is the ceiling: anything longer is not a retry interval a client should sit
+// on, and refusing it stops an absurd header from driving a sleep.
+function retryAfterSeconds(value: string | null): number | undefined {
+  if (value === null || !/^\d{1,7}$/.test(value.trim())) return undefined;
+  const seconds = Number(value.trim());
+  return seconds >= 1 && seconds <= 86_400 ? seconds : undefined;
 }
 
 // A rejection can come from a proxy, not from Daykeeper. Bound what is copied

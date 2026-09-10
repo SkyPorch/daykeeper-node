@@ -33,6 +33,21 @@
   `capabilities().workspaceClaims` boolean. It is `false` when the server has no
   console origin configured, in which case the routes answer
   `FEATURE_UNAVAILABLE` (503); it is absent on servers that predate claims.
+- A `WorkspaceClaim` now carries `acceptedAt` and `revokedAt`, both
+  `string | null` and both always present. The server has always sent them; the
+  contract omitted them under `additionalProperties: false`, which made every
+  real claim response invalid. They are non-optional in the types so a caller
+  never has to tell an absent field from an event that has not happened yet.
+- `DaykeeperApiError` gains `retryAfterSeconds`, read from a `Retry-After`
+  header the SDK can parse as a whole number of seconds between 1 and 86400. An
+  HTTP-date or an out-of-range value leaves it `undefined` rather than guessed
+  at, since converting a date needs a trusted clock. It appears in `toJSON()`
+  only when it is known.
+- Any `429` is now reported as retryable, whatever the body's own `retryable`
+  flag says. Claim creation has two limits behind that status — the hourly claim
+  window (`INVITATION_LIMIT_REACHED`) and the generic per-address and
+  per-principal request limiter (`RATE_LIMITED`) — and neither applies a write.
+  A request whose outcome is unknown stays non-retryable, as before.
 - Vendor management contract 1.3.0. **This snapshot is pinned to an unreleased
   `daykeeper-openapi` branch head, not a release tag**, so it must be re-pinned
   to the immutable `v1.3.0` tag before this version is published; see

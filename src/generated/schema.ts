@@ -937,12 +937,15 @@ export interface paths {
          *     organization comes only from the verified machine owner; no
          *     organization, pagination, or filter selector is accepted.
          *
-         *     The response returns every pending and accepted claim for the
-         *     organization in one page, ordered newest first; expired claims are
-         *     hidden, as in the existing invitation list. There is no pagination in
-         *     v1 and the item count is not capped by the contract: the hourly issue
-         *     limit on creation is what bounds how many claims an organization can
-         *     accumulate. Tokens and claim URLs are never returned by this read.
+         *     The response returns every pending, accepted and revoked claim for the
+         *     organization in one page, ordered newest first. Expired claims are
+         *     hidden: a pending claim past its expiry is not listed, as in the
+         *     existing invitation list. An accepted or revoked claim stays listed
+         *     whatever its expiry, so the history of who took the workspace and what
+         *     was withdrawn is readable. There is no pagination in v1 and the item
+         *     count is not capped by the contract: the hourly issue limit on creation
+         *     is what bounds how many claims an organization can accumulate. Tokens
+         *     and claim URLs are never returned by this read.
          */
         get: operations["listWorkspaceClaims"];
         put?: never;
@@ -971,9 +974,18 @@ export interface paths {
          *     One pending claim exists per email per organization. A different intent
          *     for the same address while a claim is pending is rejected with
          *     INVITATION_ALREADY_PENDING (409); an address that already holds a
-         *     membership is rejected with ALREADY_A_MEMBER (409); the hourly window
-         *     answers RATE_LIMITED (429); a malformed address or idempotency key is
-         *     rejected with INVALID_INPUT (400).
+         *     membership is rejected with ALREADY_A_MEMBER (409); an idempotency key
+         *     already bound to a different address is rejected with
+         *     IDEMPOTENCY_KEY_REUSED (409); the hourly claim window answers
+         *     INVITATION_LIMIT_REACHED (429); a malformed address or idempotency key
+         *     is rejected with INVALID_INPUT (400). A machine owner that no longer
+         *     holds the organization, or an organization that is not accepting
+         *     members, is rejected with ORGANIZATION_ACCESS_REQUIRED (403).
+         *
+         *     Two different limits answer 429 on these routes. The hourly claim window
+         *     answers INVITATION_LIMIT_REACHED; the generic per-address and
+         *     per-principal request limits answer RATE_LIMITED with a Retry-After
+         *     header. A client should treat either as retryable after the interval.
          *
          *     Daykeeper sends no email. The claim URL carries the token in its
          *     fragment so it never reaches server logs or referrers; it is a secret,
@@ -1862,7 +1874,9 @@ export interface components {
             /** @constant */
             role: "owner";
             /**
-             * @description Expired claims are hidden from the list rather than reported as a state.
+             * @description Expiry is not a state. A pending claim past its expiry is hidden
+             *     from the list rather than reported; accepted and revoked claims stay
+             *     listed.
              * @enum {string}
              */
             state: "pending" | "accepted" | "revoked";
@@ -1870,6 +1884,19 @@ export interface components {
             expiresAt: string;
             /** Format: date-time */
             createdAt: string;
+            /**
+             * Format: date-time
+             * @description When the invited person signed in and took ownership, or null while
+             *     the claim is pending or revoked. Always present, never omitted.
+             */
+            acceptedAt: string | null;
+            /**
+             * Format: date-time
+             * @description When the claim was revoked, either by the machine owner or by
+             *     expiry sweeping a stale pending row, or null otherwise. Always
+             *     present, never omitted.
+             */
+            revokedAt: string | null;
         };
         CreateWorkspaceClaimInput: {
             /**
@@ -1928,10 +1955,11 @@ export interface components {
         WorkspaceClaimResult: components["schemas"]["WorkspaceClaimCreated"] | components["schemas"]["WorkspaceClaimReplayed"];
         WorkspaceClaimList: {
             /**
-             * @description Every pending and accepted claim for the organization, expired
-             *     claims hidden, ordered newest first. The list is not paginated in
-             *     v1 and accepts no cursor, page, or filter selector; the hourly issue
-             *     limit bounds how many claims an organization can accumulate.
+             * @description Every pending, accepted and revoked claim for the organization,
+             *     expired claims hidden, ordered newest first. The list is not
+             *     paginated in v1 and accepts no cursor, page, or filter selector;
+             *     the hourly issue limit bounds how many claims an organization can
+             *     accumulate.
              */
             items: components["schemas"]["WorkspaceClaim"][];
         };
@@ -2164,7 +2192,13 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Workspace claim creation is bounded by an hourly window; do not retry an uncertain write automatically. */
+        /**
+         * @description Workspace claim creation is bounded by an hourly window, which answers
+         *     INVITATION_LIMIT_REACHED, and every claim route is also bounded by the
+         *     generic per-address and per-principal request limits, which answer
+         *     RATE_LIMITED with Retry-After. Do not retry an uncertain write
+         *     automatically.
+         */
         WorkspaceClaimRateLimited: {
             headers: {
                 "Cache-Control"?: "no-store";
@@ -3574,7 +3608,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Every pending and accepted claim for the authenticated organization, newest first. */
+            /** @description Every pending, accepted and revoked claim for the authenticated organization, expired claims hidden, newest first. */
             200: {
                 headers: {
                     "Cache-Control"?: "no-store";
@@ -3587,8 +3621,9 @@ export interface operations {
             };
             400: components["responses"]["WorkspaceClaimError"];
             401: components["responses"]["WorkspaceClaimError"];
-            /** @description A human bearer or agent credential was used (SCOPE_NOT_HELD). */
+            /** @description A human bearer or agent credential was used (SCOPE_NOT_HELD), or the machine owner no longer holds this organization (ORGANIZATION_ACCESS_REQUIRED). */
             403: components["responses"]["WorkspaceClaimError"];
+            /** @description The generic per-address or per-principal request limit (RATE_LIMITED). */
             429: components["responses"]["WorkspaceClaimRateLimited"];
             /** @description The console origin is not configured, so claims are not enabled (FEATURE_UNAVAILABLE). */
             503: components["responses"]["WorkspaceClaimError"];
@@ -3645,10 +3680,16 @@ export interface operations {
             /** @description The address or the Idempotency-Key header is malformed (INVALID_INPUT). */
             400: components["responses"]["WorkspaceClaimError"];
             401: components["responses"]["WorkspaceClaimError"];
-            /** @description A human bearer or agent credential was used (SCOPE_NOT_HELD). */
+            /** @description A human bearer or agent credential was used (SCOPE_NOT_HELD), or the machine owner no longer holds this organization (ORGANIZATION_ACCESS_REQUIRED). */
             403: components["responses"]["WorkspaceClaimError"];
-            /** @description INVITATION_ALREADY_PENDING, ALREADY_A_MEMBER, or IDEMPOTENCY_KEY_REUSED; no write was applied. */
+            /**
+             * @description INVITATION_ALREADY_PENDING when a different intent for the same
+             *     address is already pending, ALREADY_A_MEMBER when the address
+             *     already holds a membership, or IDEMPOTENCY_KEY_REUSED when the key
+             *     is already bound to a different address. No write was applied.
+             */
             409: components["responses"]["WorkspaceClaimError"];
+            /** @description The hourly claim window (INVITATION_LIMIT_REACHED) or the generic request limit (RATE_LIMITED); no write was applied. */
             429: components["responses"]["WorkspaceClaimRateLimited"];
             /** @description The console origin is not configured, so claims are not enabled (FEATURE_UNAVAILABLE). */
             503: components["responses"]["WorkspaceClaimError"];
@@ -3683,11 +3724,13 @@ export interface operations {
             };
             400: components["responses"]["WorkspaceClaimError"];
             401: components["responses"]["WorkspaceClaimError"];
-            /** @description A human bearer or agent credential was used (SCOPE_NOT_HELD). */
+            /** @description A human bearer or agent credential was used (SCOPE_NOT_HELD), or the machine owner no longer holds this organization (ORGANIZATION_ACCESS_REQUIRED). */
             403: components["responses"]["WorkspaceClaimError"];
+            /** @description No claim with this identifier belongs to the authenticated machine owner (RESOURCE_NOT_FOUND). A claim in another organization is reported the same way rather than disclosed. */
             404: components["responses"]["WorkspaceClaimError"];
-            /** @description The claim was already accepted and cannot be revoked (RESOURCE_CONFLICT). */
+            /** @description The claim was already accepted and cannot be revoked (RESOURCE_STATE_CONFLICT). */
             409: components["responses"]["WorkspaceClaimError"];
+            /** @description The generic per-address or per-principal request limit (RATE_LIMITED). */
             429: components["responses"]["WorkspaceClaimRateLimited"];
             /** @description The console origin is not configured, so claims are not enabled (FEATURE_UNAVAILABLE). */
             503: components["responses"]["WorkspaceClaimError"];

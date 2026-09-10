@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { DaykeeperClient } from "../src/client.ts";
+import type { DaykeeperApiError } from "../src/errors.ts";
 import type {
+  WorkspaceClaim,
   WorkspaceClaimCreated,
+  WorkspaceClaimList,
   WorkspaceClaimReplayed,
 } from "../src/types.ts";
 
@@ -14,6 +17,8 @@ const claim = {
   state: "pending" as const,
   expiresAt: "2026-09-13T01:00:00Z",
   createdAt: "2026-09-10T01:00:00Z",
+  acceptedAt: null,
+  revokedAt: null,
 };
 
 const token = `dk_invite_${"A".repeat(43)}`;
@@ -254,8 +259,10 @@ test("the local rule accepts real addresses up to the contract's 254", async () 
 test("pending, member, and rate-limit rejections surface as the server sent them", async () => {
   for (const [status, code, retryable] of [
     [409, "INVITATION_ALREADY_PENDING", false],
+    [409, "IDEMPOTENCY_KEY_REUSED", false],
     [409, "ALREADY_A_MEMBER", false],
     [429, "RATE_LIMITED", true],
+    [429, "INVITATION_LIMIT_REACHED", true],
   ] as const) {
     let calls = 0;
     const { client: daykeeper } = client(() => {
@@ -391,4 +398,105 @@ test("the claim service unavailable state is reported, not turned into a retry",
     },
   );
   assert.equal(calls, 1);
+});
+
+test("either 429 is retryable and reports the interval the server asked for", async () => {
+  // Two limits sit behind 429 on the claim routes: the hourly claim window,
+  // which answers INVITATION_LIMIT_REACHED, and the generic per-address and
+  // per-principal request limiter, which answers RATE_LIMITED. Neither applied
+  // a write, so both are retryable after the interval, whatever the body's own
+  // retryable flag happens to say.
+  for (const code of ["RATE_LIMITED", "INVITATION_LIMIT_REACHED"] as const) {
+    const { client: daykeeper } = client(
+      () =>
+        Response.json(
+          { error: { code, message: "slow down", retryable: false } },
+          { status: 429, headers: { "retry-after": "37" } },
+        ),
+      [],
+    );
+    await assert.rejects(
+      () =>
+        daykeeper.workspaceClaims.create(
+          { email: "gabriel@acme.com" },
+          { idempotencyKey: "workspace-claim-0001" },
+        ),
+      (error: DaykeeperApiError) => {
+        assert.equal(error.name, "DaykeeperApiError");
+        assert.equal(error.status, 429);
+        assert.equal(error.code, code);
+        assert.equal(error.retryable, true);
+        assert.equal(error.retryAfterSeconds, 37);
+        assert.equal(error.toJSON().retryAfterSeconds, 37);
+        return true;
+      },
+    );
+  }
+});
+
+test("an absent, dated, or absurd Retry-After leaves the interval unreported", async () => {
+  // A header the SDK cannot read as a whole number of seconds is dropped
+  // rather than guessed at: an HTTP-date needs a trusted clock, and a value
+  // past a day is not an interval a client should sit on. The rejection is
+  // still retryable; the caller just picks its own backoff.
+  for (const headers of [
+    undefined,
+    { "retry-after": "Wed, 10 Sep 2026 02:00:00 GMT" },
+    { "retry-after": "0" },
+    { "retry-after": "-5" },
+    { "retry-after": "1.5" },
+    { "retry-after": "86401" },
+    { "retry-after": "" },
+  ]) {
+    const { client: daykeeper } = client(
+      () =>
+        Response.json(
+          { error: { code: "RATE_LIMITED", message: "slow down" } },
+          { status: 429, ...(headers ? { headers } : {}) },
+        ),
+      [],
+    );
+    await assert.rejects(
+      () => daykeeper.workspaceClaims.list(),
+      (error: DaykeeperApiError) => {
+        assert.equal(
+          error.retryAfterSeconds,
+          undefined,
+          JSON.stringify(headers),
+        );
+        assert.equal(error.retryable, true);
+        assert.equal("retryAfterSeconds" in error.toJSON(), false);
+        return true;
+      },
+    );
+  }
+});
+
+test("a claim carries its lifecycle timestamps, null until they happen", async () => {
+  const accepted = {
+    ...claim,
+    state: "accepted" as const,
+    acceptedAt: "2026-09-11T00:00:00Z",
+  };
+  const revoked = {
+    ...claim,
+    state: "revoked" as const,
+    revokedAt: "2026-09-11T00:00:00Z",
+  };
+  const { client: daykeeper } = client((request) =>
+    request.method === "GET"
+      ? Response.json({ data: { items: [accepted, claim] } })
+      : Response.json({ data: revoked }),
+  );
+  const listed: WorkspaceClaimList = await daykeeper.workspaceClaims.list();
+  assert.deepEqual(listed.items, [accepted, claim]);
+  assert.equal(listed.items[0]!.acceptedAt, "2026-09-11T00:00:00Z");
+  assert.equal(listed.items[0]!.revokedAt, null);
+  // Revoke answers the bare claim, not a wrapper around one.
+  const result: WorkspaceClaim = await daykeeper.workspaceClaims.revoke(
+    claim.id,
+  );
+  assert.deepEqual(result, revoked);
+  assert.equal(result.revokedAt, "2026-09-11T00:00:00Z");
+  assert.equal(result.acceptedAt, null);
 });
