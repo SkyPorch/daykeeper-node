@@ -7,13 +7,13 @@ the vendored `openapi/daykeeper.yaml`, and every release records the exact
 rule: the contract is tagged first, and only an immutable tag may be recorded in
 a release.
 
-| SDK version | Management contract | Contract tag | Contract commit                            | Notes                                                                                                    |
-| ----------- | ------------------- | ------------ | ------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| 0.3.0       | 1.3.0               | _unreleased_ | `fb205e6380755cff40441e434e36e935e8d1b48c` | Adds machine-owner workspace claims. Pinned to a tag `v1.3.0`; re-pin to the `v1.3.0` tag before release. |
-| 0.2.1       | 1.2.0               | `v1.2.0`     | `3140bbab0b683371ee1b1c17ff8db67a9ae1fa68` | Correct existing paid-policy types and provisioning schema branches; no runtime request changes.         |
-| 0.2.0       | 1.1.0               | `v1.1.0`     | `c9a0175d0053f1a2d57c9329f6d3a36ec6acdb71` | Published. `Idempotency-Key` is required on flow mutations; replays return `200` beside `201`.           |
-| 0.1.1       | 0.1.0               | `v1.0.0`     | `35f5bd45fe0c6a6901766543bff90dae6838b965` | Vendored contract metadata aligned; no runtime contract change.                                          |
-| 0.1.0       | 0.1.0               | `v1.0.0`     | `35f5bd45fe0c6a6901766543bff90dae6838b965` | Published by hand with no provenance attestation.                                                        |
+| SDK version | Management contract | Contract tag | Contract commit                            | Notes                                                                                            |
+| ----------- | ------------------- | ------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| 0.3.0       | 1.3.0               | `v1.3.0`     | `067465edfc6c94e63867a6dd0d9db02e12683877` | Adds machine-owner workspace claims. Unpublished until the release is cut.                       |
+| 0.2.1       | 1.2.0               | `v1.2.0`     | `3140bbab0b683371ee1b1c17ff8db67a9ae1fa68` | Correct existing paid-policy types and provisioning schema branches; no runtime request changes. |
+| 0.2.0       | 1.1.0               | `v1.1.0`     | `c9a0175d0053f1a2d57c9329f6d3a36ec6acdb71` | Published. `Idempotency-Key` is required on flow mutations; replays return `200` beside `201`.   |
+| 0.1.1       | 0.1.0               | `v1.0.0`     | `35f5bd45fe0c6a6901766543bff90dae6838b965` | Vendored contract metadata aligned; no runtime contract change.                                  |
+| 0.1.0       | 0.1.0               | `v1.0.0`     | `35f5bd45fe0c6a6901766543bff90dae6838b965` | Published by hand with no provenance attestation.                                                |
 
 ## Server requirement
 
