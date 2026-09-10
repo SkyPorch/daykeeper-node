@@ -353,11 +353,66 @@ customer lifecycle, or erasure. These SDK methods are available in 0.2.0 and
 later and require a server with `capabilities.agentCredentials.enabled`.
 Server enablement remains deployment-controlled.
 
+## Workspace claims (0.3.0+)
+
+An agent that created a workspace with a machine-owner credential can hand it to
+a person as owner. All three methods require a `dk_machine_` bearer; a human
+bearer or a delegated agent credential is rejected with `SCOPE_NOT_HELD` (403).
+
+```ts
+const result = await daykeeper.workspaceClaims.create(
+  { email: "gabriel@acme.com" },
+  { idempotencyKey: generateIdempotencyKey() },
+);
+
+if (result.replayed) {
+  // The claim still exists, but its URL was revealed once and is gone.
+} else {
+  // Hand result.claimUrl to the person once, out of band. It is a secret: the
+  // token rides in the URL fragment, so never log it, store it, or put it in a
+  // command line, an issue, or a chat transcript. Daykeeper sends no email.
+}
+```
+
+A fresh claim answers `201` with `replayed: false`, `token` and `claimUrl`. An
+exact repeat under the same key answers `200` with `replayed: true` and both
+fields `null`: the claim still exists, but the URL cannot be recovered. To
+reissue, revoke the pending claim and create a new one under a new key.
+
+The contract gives the two statuses separate schemas, so `WorkspaceClaimResult`
+is a union of `WorkspaceClaimCreated` and `WorkspaceClaimReplayed` discriminated
+by `replayed`. `create()` still returns the single `WorkspaceClaimResult` type;
+narrowing on `replayed` is what makes `token` and `claimUrl` `string` rather
+than `string | null`, so the compiler stops a read of a secret that a replay
+never carries.
+
+`workspaceClaims.list()` returns every pending and accepted claim without
+tokens, newest first; expired claims are hidden. The list is not paginated in
+v1 and is not capped, so read `items` in full. `workspaceClaims.revoke(claimId)` is safe to repeat
+and returns the claim in state `revoked`.
+
+The address must be lowercase and at most 254 characters, with dot-separated
+local atoms — no leading, trailing, or doubled dot — and a domain of hyphen-safe
+labels with at least one dot. The SDK mirrors that contract pattern and refuses
+anything else locally, before an idempotency key is bound or an hourly claim
+window is consumed. The length limit is counted in Unicode code points, the unit
+the contract's `maxLength` uses. Documented server rejections are
+`INVITATION_ALREADY_PENDING` and `ALREADY_A_MEMBER` (409), `RATE_LIMITED` (429),
+and `FEATURE_UNAVAILABLE` (503) when no console origin is configured. Check
+`capabilities().workspaceClaims` before offering the flow. If a create fails
+without a response it is reported as `outcomeUnknown`: inspect
+`workspaceClaims.list()` and repeat only the exact original request with the same
+key. Never create a second claim as an automatic retry.
+
+Accepting a claim does not demote the machine owner; the agent keeps its
+credential and keeps working.
+
 ## API groups
 
 - `capabilities()`
 - `entitlements.get`
 - `agentCredentials.list`, `agentCredentials.create`, `agentCredentials.revoke`
+- `workspaceClaims.create`, `workspaceClaims.list`, `workspaceClaims.revoke`
 - `websiteChannels.get`
 - `inboxes.get`
 - `tenants.plan`, `tenants.apply`, `tenants.list`, `tenants.get`
@@ -380,6 +435,14 @@ response body. `DaykeeperTransportError` separates timeouts, aborts, network
 failures, invalid responses, and local configuration errors. Both carry
 `outcomeUnknown`, which is true only when a mutation may already have been
 applied.
+
+A `429` is always retryable and applies no write, whichever code carries it:
+workspace claim creation is bounded both by an hourly claim window, which
+answers `INVITATION_LIMIT_REACHED`, and by the generic per-address and
+per-principal request limits, which answer `RATE_LIMITED`. When the response
+carries a `Retry-After` header the SDK can read as a whole number of seconds,
+`DaykeeperApiError.retryAfterSeconds` reports it; an HTTP-date or an
+out-of-range value leaves it `undefined`, and you choose your own backoff.
 
 ## Deadlines and cancellation
 

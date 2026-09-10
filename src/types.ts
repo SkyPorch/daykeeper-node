@@ -24,6 +24,22 @@ export type CreateAgentCredentialResult =
   Schemas["CreateAgentCredentialResult"];
 export type RevokeAgentCredentialResult =
   Schemas["RevokeAgentCredentialResult"];
+export type WorkspaceClaim = Schemas["WorkspaceClaim"];
+export type WorkspaceClaimState = Schemas["WorkspaceClaim"]["state"];
+export type CreateWorkspaceClaimInput = Schemas["CreateWorkspaceClaimInput"];
+/** The result of a fresh claim application, the 201 body. `token` and
+ * `claimUrl` are revealed exactly once and `replayed` is always false. Never
+ * log or persist either value. */
+export type WorkspaceClaimCreated = Schemas["WorkspaceClaimCreated"];
+/** The result of an exact repeat under the same idempotency key, the 200 body.
+ * `token` and `claimUrl` are always null and `replayed` is always true; the
+ * secret cannot be recovered. */
+export type WorkspaceClaimReplayed = Schemas["WorkspaceClaimReplayed"];
+/** A workspace claim result: the union of the fresh and replayed shapes,
+ * discriminated by `replayed`. Narrow on `replayed === false` to reach a
+ * non-null `token` and `claimUrl`. Never log or persist either value. */
+export type WorkspaceClaimResult = Schemas["WorkspaceClaimResult"];
+export type WorkspaceClaimList = Schemas["WorkspaceClaimList"];
 export type DomainVerification = Schemas["DomainVerification"];
 export type DomainVerificationInput = Schemas["DomainVerificationInput"];
 export type MachinePublicKey = Schemas["MachinePublicKey"];

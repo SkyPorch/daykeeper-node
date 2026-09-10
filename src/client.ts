@@ -39,6 +39,10 @@ import type {
   OperatorConversationList,
   OperatorConversationMessages,
   OperatorConversationReply,
+  WorkspaceClaim,
+  WorkspaceClaimList,
+  WorkspaceClaimResult,
+  CreateWorkspaceClaimInput,
 } from "./types.js";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -54,6 +58,8 @@ const ALLOWED_PATHS: readonly RegExp[] = [
   "/v1/usage",
   "/v1/agent-credentials",
   `/v1/agent-credentials/${SEGMENT}/revoke`,
+  "/v1/workspace-claims",
+  `/v1/workspace-claims/${SEGMENT}/revoke`,
   "/v1/tenant-plans",
   "/v1/tenants",
   "/v1/tenants:apply",
@@ -165,6 +171,35 @@ export class DaykeeperClient {
       credentialId: string,
       options?: DaykeeperRequestOptions,
     ) => Promise<RevokeAgentCredentialResult>;
+  };
+  readonly workspaceClaims: {
+    /**
+     * Issue an owner claim for the machine bearer's own workspace. The result
+     * carries `token` and `claimUrl` exactly once; a replay of the exact same
+     * request under the same key returns both as null with `replayed: true`.
+     * The claim URL is a secret handoff: never log or persist it.
+     *
+     * `WorkspaceClaimResult` is a union discriminated by `replayed`, so narrow
+     * before reading the secret:
+     *
+     * ```ts
+     * const result = await daykeeper.workspaceClaims.create(
+     *   { email: "gabriel@acme.com" },
+     *   { idempotencyKey: generateIdempotencyKey() },
+     * );
+     * if (result.replayed) return result.claim; // token is null here
+     * hand(result.claimUrl); // string, checked by the compiler
+     * ```
+     */
+    create: (
+      input: CreateWorkspaceClaimInput,
+      options: DaykeeperIdempotencyOptions,
+    ) => Promise<WorkspaceClaimResult>;
+    list: (options?: DaykeeperRequestOptions) => Promise<WorkspaceClaimList>;
+    revoke: (
+      claimId: string,
+      options?: DaykeeperRequestOptions,
+    ) => Promise<WorkspaceClaim>;
   };
   readonly websiteChannels: {
     get: (
@@ -345,6 +380,26 @@ export class DaykeeperClient {
             signal: requestOptions.signal,
           },
         ),
+    };
+    this.workspaceClaims = {
+      create: (input, requestOptions) =>
+        this.#request("/v1/workspace-claims", {
+          method: "POST",
+          body: validateWorkspaceClaimInput(input),
+          idempotencyKey: requestOptions?.idempotencyKey,
+          requireIdempotencyKey: true,
+          signal: requestOptions?.signal,
+        }),
+      list: (requestOptions = {}) =>
+        this.#request("/v1/workspace-claims", {
+          signal: requestOptions.signal,
+        }),
+      revoke: (claimId, requestOptions = {}) =>
+        this.#request(`/v1/workspace-claims/${pathSegment(claimId)}/revoke`, {
+          method: "POST",
+          body: {},
+          signal: requestOptions.signal,
+        }),
     };
     this.websiteChannels = {
       get: (tenantId, requestOptions = {}) =>
@@ -819,6 +874,55 @@ function validateDomainVerificationInput(
   return { origin: value.origin };
 }
 
+// CreateWorkspaceClaimInput.email in contract 1.3.0: a lowercase address of at
+// most 254 characters whose local part is one or more dot-separated atoms, so
+// no leading, trailing or doubled dot, and whose domain is one or more labels
+// of at most 63 characters that neither start nor end with a hyphen, with at
+// least one dot. This mirrors the contract pattern exactly rather than
+// inventing a stricter or looser local rule, so a typo never consumes an hourly
+// claim window or binds an idempotency key to a request the server would refuse
+// anyway. The server remains the authority; this only avoids a wasted round
+// trip.
+const CLAIM_EMAIL_PATTERN =
+  /^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
+
+const CLAIM_EMAIL_MAX_CODE_POINTS = 254;
+
+// JSON Schema measures maxLength in Unicode code points, while String.length
+// counts UTF-16 code units, so any character outside the basic multilingual
+// plane counts twice and a locally rejected address could still be within the
+// contract's limit. Count code points, without materialising an array for an
+// arbitrarily long caller string.
+function codePointLength(value: string): number {
+  let count = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const unit = value.charCodeAt(index);
+    if (unit >= 0xd800 && unit <= 0xdbff && index + 1 < value.length) {
+      const next = value.charCodeAt(index + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) index += 1;
+    }
+    count += 1;
+  }
+  return count;
+}
+
+function validateWorkspaceClaimInput(
+  value: CreateWorkspaceClaimInput,
+): CreateWorkspaceClaimInput {
+  if (
+    !value ||
+    Object.keys(value).sort().join(",") !== "email" ||
+    typeof value.email !== "string" ||
+    codePointLength(value.email) > CLAIM_EMAIL_MAX_CODE_POINTS ||
+    !CLAIM_EMAIL_PATTERN.test(value.email)
+  ) {
+    throw configurationError(
+      "A workspace claim requires a lowercased email address of 1 through 254 characters: dot-separated local atoms, then @, then hyphen-safe domain labels with at least one dot",
+    );
+  }
+  return { email: value.email };
+}
+
 function isIpLiteral(hostname: string): boolean {
   return hostname.includes(":") || /^(?:\d{1,3}\.){3}\d{1,3}$/.test(hostname);
 }
@@ -904,12 +1008,18 @@ function apiError(response: Response, payload: unknown): DaykeeperApiError {
     message:
       boundedString(body.message, MAX_MESSAGE_LENGTH) ??
       "The Daykeeper API rejected the request",
+    // 429 is retryable whichever code carries it. Claim creation has two
+    // limits behind that status, the hourly claim window
+    // (INVITATION_LIMIT_REACHED) and the generic request limiter
+    // (RATE_LIMITED), and neither applied a write. The status settles it, so a
+    // body that says otherwise does not make the caller give up for good.
+    // An unknown outcome still wins: DaykeeperApiError clears retryable there.
     retryable:
-      typeof body.retryable === "boolean"
+      response.status === 429 ||
+      (typeof body.retryable === "boolean"
         ? body.retryable
-        : response.status === 408 ||
-          response.status === 429 ||
-          response.status >= 500,
+        : response.status === 408 || response.status >= 500),
+    retryAfterSeconds: retryAfterSeconds(response.headers.get("retry-after")),
     nextActions: stringArray(body.nextActions),
     correlationId:
       boundedString(body.correlationId, MAX_CORRELATION_ID_LENGTH) ??
@@ -917,6 +1027,18 @@ function apiError(response: Response, payload: unknown): DaykeeperApiError {
     fields: stringArray(body.fields),
     outcomeUnknown: body.outcomeUnknown === true,
   });
+}
+
+// Retry-After as the contract declares it: a whole number of seconds, at least
+// one. RFC 9110 also allows an HTTP-date, and a proxy may send one; that form
+// is dropped rather than converted, because turning it into a duration needs a
+// trusted clock and a wrong one would hand the caller a made-up number. A day
+// is the ceiling: anything longer is not a retry interval a client should sit
+// on, and refusing it stops an absurd header from driving a sleep.
+function retryAfterSeconds(value: string | null): number | undefined {
+  if (value === null || !/^\d{1,7}$/.test(value.trim())) return undefined;
+  const seconds = Number(value.trim());
+  return seconds >= 1 && seconds <= 86_400 ? seconds : undefined;
 }
 
 // A rejection can come from a proxy, not from Daykeeper. Bound what is copied
