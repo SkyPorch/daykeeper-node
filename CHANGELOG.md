@@ -14,13 +14,22 @@
   carries `token: null`, `claimUrl: null` and `replayed: true`. The claim URL is
   a one-time secret that carries its token in the URL fragment: deliver it out
   of band, and never log or persist it. Daykeeper sends no email.
-- The SDK rejects a malformed claim address locally (lowercased, at most 254
-  characters, must contain `@`) before an idempotency key is bound or an hourly
-  claim window is consumed. A create whose response is lost is reported as
+- The SDK rejects a malformed claim address locally before an idempotency key is
+  bound or an hourly claim window is consumed. It mirrors the contract pattern:
+  lowercase, at most 254 Unicode code points, dot-separated local atoms with no
+  leading, trailing, or doubled dot, and a domain of hyphen-safe labels with at
+  least one dot. The limit is counted in code points, the unit JSON Schema's
+  `maxLength` uses, rather than UTF-16 code units. A create whose response is lost is reported as
   `outcomeUnknown` and is never retried automatically; repeat it with the same
   key, or inspect `workspaceClaims.list()` first.
+- `WorkspaceClaimResult` is a union of the new `WorkspaceClaimCreated` and
+  `WorkspaceClaimReplayed` types, discriminated by `replayed`, because the
+  contract now gives `201` and `200` separate schemas. `create()` still returns
+  the single `WorkspaceClaimResult` type; narrowing on `replayed` is what turns
+  `token` and `claimUrl` from `string | null` into `string`.
 - Add the `WorkspaceClaim`, `WorkspaceClaimState`, `CreateWorkspaceClaimInput`,
-  `WorkspaceClaimResult` and `WorkspaceClaimList` types, and the optional
+  `WorkspaceClaimResult`, `WorkspaceClaimCreated`, `WorkspaceClaimReplayed` and
+  `WorkspaceClaimList` types, and the optional
   `capabilities().workspaceClaims` boolean. It is `false` when the server has no
   console origin configured, in which case the routes answer
   `FEATURE_UNAVAILABLE` (503); it is absent on servers that predate claims.

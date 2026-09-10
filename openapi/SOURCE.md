@@ -3,10 +3,14 @@
 `daykeeper.yaml` is an exact, byte-for-byte copy of `openapi/daykeeper.yaml`
 from `SkyPorch/daykeeper-openapi`, **unreleased** contract `1.3.0` candidate on
 branch `codex/workspace-claims-contract`, commit
-`fb205e6380755cff40441e434e36e935e8d1b48c`.
+`88f921a3c9b97ab789a018399002b559b766c30b`.
 
-- SHA-256: `566e762294dd420c8c54eb5b93f77d8388138bf91c4f4843d4e77f5697741d4d`
-- Git blob: `b3c6c8aeb2f2f2c1b0d5d712290af79019f91aed`
+- SHA-256: `eefa7b061ba38f5b58754a60479c87899350dd5a04d1ca7ae43a9f2de1edbbc4`
+- Git blob: `96becdb8285fce8e0ea3180ef57396c663193f43`
+
+This re-vendors the same branch after its review fixes: commit
+`88f921a3c9b97ab789a018399002b559b766c30b` replaces
+`fb205e6380755cff40441e434e36e935e8d1b48c`.
 
 **This is a branch head, not a release tag.** `RELEASING.md` step 2 forbids a
 branch head in a release, so `@skyporch/daykeeper` 0.3.0 must not be published
@@ -19,13 +23,24 @@ There is no local delta. This repository does not modify the vendored contract.
 
 The upstream change adds machine-owner workspace claims: `POST`/`GET`
 `/v1/workspace-claims` and `POST /v1/workspace-claims/{claimId}/revoke`, the
-`WorkspaceClaim`, `CreateWorkspaceClaimInput`, `WorkspaceClaimResult` and
-`WorkspaceClaimList` schemas with their envelopes, the `WorkspaceClaimId`
-parameter, non-cacheable claim error and rate-limit responses, and the optional
+`WorkspaceClaim`, `CreateWorkspaceClaimInput`, `WorkspaceClaimCreated`,
+`WorkspaceClaimReplayed`, `WorkspaceClaimResult` and `WorkspaceClaimList`
+schemas with their envelopes, the `WorkspaceClaimId` parameter, non-cacheable
+claim error and rate-limit responses, and the optional
 `capabilities.workspaceClaims` boolean. Creation requires an `Idempotency-Key`
 and reveals `token` and `claimUrl` exactly once; a replay returns both as
 `null`. Every addition is additive and optional, so `info.version` moves from
 `1.2.0` to `1.3.0` under the upstream `VERSIONING.md`.
+
+The review fixes carried by this re-vendor, all within the same unreleased
+`1.3.0`: the two success bodies of `createWorkspaceClaim` are now
+status-specific, `WorkspaceClaimCreated` for `201` and `WorkspaceClaimReplayed`
+for `200`, with `WorkspaceClaimResult` kept as their `oneOf` so the SDK still
+has one result type; `WorkspaceClaimList.items` lost its `maxItems: 100`, which
+capped an unpaginated list; and `CreateWorkspaceClaimInput.email` moved from
+"no uppercase, no whitespace, one @" to a real lowercase address rule. The last
+is the only change that narrows what the contract accepts, and it narrows an
+unreleased addition, so it is not a break for any published client.
 
 The previous pin, tag `v1.2.0`, commit
 `3140bbab0b683371ee1b1c17ff8db67a9ae1fa68`, widened `EntitlementPolicy.plan` to

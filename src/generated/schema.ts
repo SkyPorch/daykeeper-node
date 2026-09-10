@@ -935,10 +935,14 @@ export interface paths {
          * List the current organization's workspace claims
          * @description Requires a machine-owner credential with daykeeper.accounts:read. The
          *     organization comes only from the verified machine owner; no
-         *     organization, pagination, or filter selector is accepted. Pending and
-         *     accepted claims are returned; expired claims are hidden, as in the
-         *     existing invitation list. Tokens and claim URLs are never returned by
-         *     this read.
+         *     organization, pagination, or filter selector is accepted.
+         *
+         *     The response returns every pending and accepted claim for the
+         *     organization in one page, ordered newest first; expired claims are
+         *     hidden, as in the existing invitation list. There is no pagination in
+         *     v1 and the item count is not capped by the contract: the hourly issue
+         *     limit on creation is what bounds how many claims an organization can
+         *     accumulate. Tokens and claim URLs are never returned by this read.
          */
         get: operations["listWorkspaceClaims"];
         put?: never;
@@ -956,6 +960,13 @@ export interface paths {
          *     exact repeat under the same key answers 200 with `replayed: true` and
          *     both `token` and `claimUrl` null; no secret can be recovered. Revoke the
          *     pending claim and create a new one to reissue a lost URL.
+         *
+         *     The two success bodies are separate schemas rather than one loose shape:
+         *     201 is always `WorkspaceClaimCreated`, with a non-null token and claim
+         *     URL and `replayed` constrained to false, and 200 is always
+         *     `WorkspaceClaimReplayed`, with both fields null and `replayed`
+         *     constrained to true. Neither status ever carries the other's shape, so a
+         *     client may narrow on the status code alone.
          *
          *     One pending claim exists per email per organization. A different intent
          *     for the same address while a claim is pending is rejected with
@@ -1862,25 +1873,66 @@ export interface components {
         };
         CreateWorkspaceClaimInput: {
             /**
-             * @description Lowercased address that must accept the claim. Daykeeper sends no
-             *     email; the caller delivers the returned claim URL out of band.
+             * @description Lowercased address that must accept the claim. The local part is one
+             *     or more dot-separated atoms, so a leading, trailing, or doubled dot
+             *     is rejected; the domain is one or more labels of at most 63
+             *     characters that neither start nor end with a hyphen, separated by
+             *     dots, and at least one dot is required. Uppercase is rejected rather
+             *     than folded so the stored address matches the one that signs in.
+             *     Daykeeper sends no email; the caller delivers the returned claim URL
+             *     out of band.
+             * @example gabriel@acme.com
+             * @example gabriel+claims@mail.acme.co.uk
              */
             email: string;
         };
-        /** @description A fresh result has a token and claim URL with replayed false; a replay has both null and replayed true. */
-        WorkspaceClaimResult: {
+        /**
+         * @description The result of a fresh application: the claim, its single-use token, and
+         *     the console claim URL, revealed exactly once. This is the 201 body.
+         */
+        WorkspaceClaimCreated: {
             claim: components["schemas"]["WorkspaceClaim"];
             /** @description Sensitive single-use invitation token revealed only on the original successful response. Never log or persist it outside a secret manager. */
-            token: string | null;
+            token: string;
             /**
              * @description Sensitive one-time handoff URL built from the console origin. The
              *     token is carried in the fragment so it never reaches server logs or
              *     referrers. Revealed only on the original successful response.
              */
-            claimUrl: string | null;
-            replayed: boolean;
+            claimUrl: string;
+            /** @constant */
+            replayed: false;
         };
+        /**
+         * @description The result of an exact repeat under the same idempotency key: the
+         *     pending claim without its secret. This is the 200 body. Revoke the claim
+         *     and create a new one to reissue a lost URL.
+         */
+        WorkspaceClaimReplayed: {
+            claim: components["schemas"]["WorkspaceClaim"];
+            /** @description Always null on a replay; the token was revealed only on the original response and cannot be recovered. */
+            token: null;
+            /** @description Always null on a replay; the claim URL was revealed only on the original response and cannot be recovered. */
+            claimUrl: null;
+            /** @constant */
+            replayed: true;
+        };
+        /**
+         * @description Either result of a create call, discriminated by `replayed`: a fresh
+         *     result carries a string token and claim URL with `replayed` false, and a
+         *     replay carries both fields null with `replayed` true. Responses are
+         *     status-specific — 201 is always the fresh shape and 200 always the
+         *     replay — so a client that already knows the status can narrow to one
+         *     member without inspecting `replayed`.
+         */
+        WorkspaceClaimResult: components["schemas"]["WorkspaceClaimCreated"] | components["schemas"]["WorkspaceClaimReplayed"];
         WorkspaceClaimList: {
+            /**
+             * @description Every pending and accepted claim for the organization, expired
+             *     claims hidden, ordered newest first. The list is not paginated in
+             *     v1 and accepts no cursor, page, or filter selector; the hourly issue
+             *     limit bounds how many claims an organization can accumulate.
+             */
             items: components["schemas"]["WorkspaceClaim"][];
         };
         /** @enum {string} */
@@ -1925,6 +1977,14 @@ export interface components {
         };
         WorkspaceClaimResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["WorkspaceClaim"];
+        };
+        /** @description The 201 envelope. It narrows WorkspaceClaimResultResponse to the fresh member of the union. */
+        WorkspaceClaimCreatedResponse: components["schemas"]["WorkspaceClaimResultResponse"] & {
+            data: components["schemas"]["WorkspaceClaimCreated"];
+        };
+        /** @description The 200 envelope. It narrows WorkspaceClaimResultResponse to the replay member of the union. */
+        WorkspaceClaimReplayedResponse: components["schemas"]["WorkspaceClaimResultResponse"] & {
+            data: components["schemas"]["WorkspaceClaimReplayed"];
         };
         WorkspaceClaimResultResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["WorkspaceClaimResult"];
@@ -3514,7 +3574,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Pending and accepted claims for the authenticated organization. */
+            /** @description Every pending and accepted claim for the authenticated organization, newest first. */
             200: {
                 headers: {
                     "Cache-Control"?: "no-store";
@@ -3568,7 +3628,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["WorkspaceClaimResultResponse"];
+                    "application/json": components["schemas"]["WorkspaceClaimReplayedResponse"];
                 };
             };
             /** @description A claim was created and its token and claim URL are revealed exactly once. */
@@ -3579,7 +3639,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["WorkspaceClaimResultResponse"];
+                    "application/json": components["schemas"]["WorkspaceClaimCreatedResponse"];
                 };
             };
             /** @description The address or the Idempotency-Key header is malformed (INVALID_INPUT). */

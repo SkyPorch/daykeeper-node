@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { DaykeeperClient } from "../src/client.ts";
+import type {
+  WorkspaceClaimCreated,
+  WorkspaceClaimReplayed,
+} from "../src/types.ts";
 
 const claim = {
   id: "40000000-0000-4000-8000-000000000001",
@@ -111,6 +115,44 @@ test("a replayed claim returns the pending claim with no token or URL", async ()
   assert.equal(requests.length, 1);
 });
 
+test("the create result is a union the caller narrows on replayed", async () => {
+  // The 201 and 200 bodies are separate contract schemas, so the single result
+  // type is a union discriminated by `replayed`. Narrowing is what proves the
+  // secret is only reachable on the fresh branch; the compiler checks the
+  // annotations below and the assertions check the runtime shape.
+  for (const replayed of [false, true]) {
+    const { client: daykeeper } = client(() =>
+      replayed
+        ? Response.json(
+            { data: { claim, token: null, claimUrl: null, replayed: true } },
+            { status: 200 },
+          )
+        : Response.json(
+            { data: { claim, token, claimUrl, replayed: false } },
+            { status: 201 },
+          ),
+    );
+    const result = await daykeeper.workspaceClaims.create(
+      { email: "gabriel@acme.com" },
+      { idempotencyKey: "workspace-claim-0001" },
+    );
+    if (result.replayed) {
+      const narrowed: WorkspaceClaimReplayed = result;
+      const secret: null = narrowed.token;
+      assert.equal(replayed, true);
+      assert.equal(secret, null);
+      assert.equal(narrowed.claimUrl, null);
+    } else {
+      const narrowed: WorkspaceClaimCreated = result;
+      const url: string = narrowed.claimUrl;
+      assert.equal(replayed, false);
+      assert.equal(narrowed.token, token);
+      assert.equal(url, claimUrl);
+      assert.match(url, /#token=dk_invite_/);
+    }
+  }
+});
+
 test("create requires an idempotency key and a lowercased address", async () => {
   let calls = 0;
   const { client: daykeeper } = client(() => {
@@ -141,6 +183,22 @@ test("create requires an idempotency key and a lowercased address", async () => 
     "",
     "gabriel @acme.com",
     `${"a".repeat(250)}@acme.com`,
+    // Mirrors the tightened contract pattern: no bare dots, no empty domain
+    // label, no dotless or hyphen-edged domain, no doubled or edge dot in the
+    // local part.
+    ".@.",
+    "user@.example",
+    "gabriel..uribe@acme.com",
+    ".gabriel@acme.com",
+    "gabriel.@acme.com",
+    "gabriel@acme",
+    "gabriel@-acme.com",
+    "gabriel@acme-.com",
+    "gabriel@acme..com",
+    "gabriel@@acme.com",
+    "gabriel@acme.com ",
+    // 255 code points is one past the contract's maxLength.
+    `${"a".repeat(246)}@acme.com`,
   ]) {
     assert.throws(
       () =>
@@ -164,6 +222,33 @@ test("create requires an idempotency key and a lowercased address", async () => 
     code: "INVALID_CONFIGURATION",
   });
   assert.equal(calls, 0);
+});
+
+test("the local rule accepts real addresses up to the contract's 254", async () => {
+  let calls = 0;
+  const { client: daykeeper } = client(() => {
+    calls++;
+    return Response.json(
+      { data: { claim, token, claimUrl, replayed: false } },
+      { status: 201 },
+    );
+  });
+  const accepted = [
+    "gabriel@acme.com",
+    "gabriel+claims@mail.acme.co.uk",
+    "a@b.co",
+    "first.last@sub.domain.example",
+    "user!#$%&'*+/=?^_`{|}~-@example.com",
+    // Exactly 254 code points, the contract's maxLength.
+    `${"a".repeat(245)}@acme.com`,
+  ];
+  for (const email of accepted) {
+    await daykeeper.workspaceClaims.create(
+      { email },
+      { idempotencyKey: "workspace-claim-0001" },
+    );
+  }
+  assert.equal(calls, accepted.length);
 });
 
 test("pending, member, and rate-limit rejections surface as the server sent them", async () => {

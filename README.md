@@ -365,9 +365,11 @@ const result = await daykeeper.workspaceClaims.create(
   { idempotencyKey: generateIdempotencyKey() },
 );
 
-if (result.claimUrl) {
-  // Hand this URL to the person once, out of band. It is a secret: the token
-  // rides in the URL fragment, so never log it, store it, or put it in a
+if (result.replayed) {
+  // The claim still exists, but its URL was revealed once and is gone.
+} else {
+  // Hand result.claimUrl to the person once, out of band. It is a secret: the
+  // token rides in the URL fragment, so never log it, store it, or put it in a
   // command line, an issue, or a chat transcript. Daykeeper sends no email.
 }
 ```
@@ -377,13 +379,24 @@ exact repeat under the same key answers `200` with `replayed: true` and both
 fields `null`: the claim still exists, but the URL cannot be recovered. To
 reissue, revoke the pending claim and create a new one under a new key.
 
-`workspaceClaims.list()` returns pending and accepted claims without tokens;
-expired claims are hidden. `workspaceClaims.revoke(claimId)` is safe to repeat
+The contract gives the two statuses separate schemas, so `WorkspaceClaimResult`
+is a union of `WorkspaceClaimCreated` and `WorkspaceClaimReplayed` discriminated
+by `replayed`. `create()` still returns the single `WorkspaceClaimResult` type;
+narrowing on `replayed` is what makes `token` and `claimUrl` `string` rather
+than `string | null`, so the compiler stops a read of a secret that a replay
+never carries.
+
+`workspaceClaims.list()` returns every pending and accepted claim without
+tokens, newest first; expired claims are hidden. The list is not paginated in
+v1 and is not capped, so read `items` in full. `workspaceClaims.revoke(claimId)` is safe to repeat
 and returns the claim in state `revoked`.
 
-The address must be lowercased, at most 254 characters, and contain `@`; the SDK
-refuses anything else locally, before an idempotency key is bound or an hourly
-claim window is consumed. Documented server rejections are
+The address must be lowercase and at most 254 characters, with dot-separated
+local atoms — no leading, trailing, or doubled dot — and a domain of hyphen-safe
+labels with at least one dot. The SDK mirrors that contract pattern and refuses
+anything else locally, before an idempotency key is bound or an hourly claim
+window is consumed. The length limit is counted in Unicode code points, the unit
+the contract's `maxLength` uses. Documented server rejections are
 `INVITATION_ALREADY_PENDING` and `ALREADY_A_MEMBER` (409), `RATE_LIMITED` (429),
 and `FEATURE_UNAVAILABLE` (503) when no console origin is configured. Check
 `capabilities().workspaceClaims` before offering the flow. If a create fails

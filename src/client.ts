@@ -178,6 +178,18 @@ export class DaykeeperClient {
      * carries `token` and `claimUrl` exactly once; a replay of the exact same
      * request under the same key returns both as null with `replayed: true`.
      * The claim URL is a secret handoff: never log or persist it.
+     *
+     * `WorkspaceClaimResult` is a union discriminated by `replayed`, so narrow
+     * before reading the secret:
+     *
+     * ```ts
+     * const result = await daykeeper.workspaceClaims.create(
+     *   { email: "gabriel@acme.com" },
+     *   { idempotencyKey: generateIdempotencyKey() },
+     * );
+     * if (result.replayed) return result.claim; // token is null here
+     * hand(result.claimUrl); // string, checked by the compiler
+     * ```
      */
     create: (
       input: CreateWorkspaceClaimInput,
@@ -862,11 +874,37 @@ function validateDomainVerificationInput(
   return { origin: value.origin };
 }
 
-// The contract accepts a lowercased address of at most 254 characters that
-// contains an "@". Reject anything else locally so a typo never consumes an
-// hourly claim window or binds an idempotency key to a request the server
-// would refuse anyway.
-const CLAIM_EMAIL_PATTERN = /^[^A-Z@\s]+@[^A-Z@\s]+$/;
+// CreateWorkspaceClaimInput.email in contract 1.3.0: a lowercase address of at
+// most 254 characters whose local part is one or more dot-separated atoms, so
+// no leading, trailing or doubled dot, and whose domain is one or more labels
+// of at most 63 characters that neither start nor end with a hyphen, with at
+// least one dot. This mirrors the contract pattern exactly rather than
+// inventing a stricter or looser local rule, so a typo never consumes an hourly
+// claim window or binds an idempotency key to a request the server would refuse
+// anyway. The server remains the authority; this only avoids a wasted round
+// trip.
+const CLAIM_EMAIL_PATTERN =
+  /^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
+
+const CLAIM_EMAIL_MAX_CODE_POINTS = 254;
+
+// JSON Schema measures maxLength in Unicode code points, while String.length
+// counts UTF-16 code units, so any character outside the basic multilingual
+// plane counts twice and a locally rejected address could still be within the
+// contract's limit. Count code points, without materialising an array for an
+// arbitrarily long caller string.
+function codePointLength(value: string): number {
+  let count = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const unit = value.charCodeAt(index);
+    if (unit >= 0xd800 && unit <= 0xdbff && index + 1 < value.length) {
+      const next = value.charCodeAt(index + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) index += 1;
+    }
+    count += 1;
+  }
+  return count;
+}
 
 function validateWorkspaceClaimInput(
   value: CreateWorkspaceClaimInput,
@@ -875,11 +913,11 @@ function validateWorkspaceClaimInput(
     !value ||
     Object.keys(value).sort().join(",") !== "email" ||
     typeof value.email !== "string" ||
-    value.email.length > 254 ||
+    codePointLength(value.email) > CLAIM_EMAIL_MAX_CODE_POINTS ||
     !CLAIM_EMAIL_PATTERN.test(value.email)
   ) {
     throw configurationError(
-      "A workspace claim requires a lowercased email address of 1 through 254 characters containing @",
+      "A workspace claim requires a lowercased email address of 1 through 254 characters: dot-separated local atoms, then @, then hyphen-safe domain labels with at least one dot",
     );
   }
   return { email: value.email };
