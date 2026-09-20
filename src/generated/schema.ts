@@ -1825,8 +1825,11 @@ export interface components {
             scopes: components["schemas"]["AgentCredentialScope"][];
             /** @enum {string} */
             state: "active" | "expired" | "revoked";
-            /** Format: date-time */
-            expiresAt: string;
+            /**
+             * Format: date-time
+             * @description Null when the credential lasts until it is revoked.
+             */
+            expiresAt: string | null;
             /** Format: date-time */
             lastUsedAt: string | null;
             /** Format: date-time */
@@ -1842,8 +1845,11 @@ export interface components {
         CreateAgentCredentialInput: {
             name: string;
             scopes: components["schemas"]["AgentCredentialScope"][];
-            /** @default 30 */
-            validityDays: number;
+            /**
+             * @description Days until the credential expires. Omitted or null, the default, issues a credential that lasts until it is revoked.
+             * @default null
+             */
+            validityDays: number | null;
         };
         /** @description A fresh result has a token and replayed false; a replay has token null and replayed true. */
         CreateAgentCredentialResult: {

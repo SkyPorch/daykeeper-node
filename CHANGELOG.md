@@ -2,6 +2,16 @@
 
 ## 0.3.0 (unreleased)
 
+- Agent credentials last until they are revoked by default. `validityDays` on
+  `agentCredentials.create` is now `number | null`, from 1 through 365; omitted
+  or `null` issues a credential with no expiry. `AgentCredential.expiresAt` is
+  now `string | null`, and is `null` for such a credential, so code that passes
+  it straight to `new Date()` needs a null check. The previous default was 30
+  days with a maximum of 90, which stopped a server key in a deployment's
+  environment a month after it was created. Requires a server with
+  `SkyPorch/daykeeper` PR #217; an older server rejects `validityDays: null`
+  and values over 90, and still applies its 30-day default when the field is
+  omitted. Vendors contract `1.4.0`.
 - Add the `workspaceClaims` namespace, so an agent that created a workspace can
   hand it to a person as owner: `workspaceClaims.create({ email }, { idempotencyKey })`,
   `workspaceClaims.list()` and `workspaceClaims.revoke(claimId)`. All three
