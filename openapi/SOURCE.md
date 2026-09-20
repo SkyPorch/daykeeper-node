@@ -131,4 +131,4 @@ server version; older servers remain compatible with existing account-only
 methods.
 
 The source above is the immutable `v1.4.0` tag, so this pin satisfies
-`RELEASING.md` step 2 for the 0.3.0 release.
+`RELEASING.md` step 2 for the 0.4.0 release.
