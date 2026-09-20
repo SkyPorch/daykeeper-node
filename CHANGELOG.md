@@ -1,6 +1,14 @@
 # Changelog
 
-## 0.3.0 (unreleased)
+## 0.4.0
+
+### Breaking
+
+- `AgentCredential.expiresAt` is now `string | null`. TypeScript code that
+  passes it straight to `new Date()` needs a null check. Nothing changes at
+  runtime for a credential that has an expiry.
+
+### Changed
 
 - Agent credentials last until they are revoked by default. `validityDays` on
   `agentCredentials.create` is now `number | null`, from 1 through 365; omitted
@@ -12,6 +20,11 @@
   `SkyPorch/daykeeper` PR #217; an older server rejects `validityDays: null`
   and values over 90, and still applies its 30-day default when the field is
   omitted. Vendors contract `1.4.0`.
+
+## 0.3.0
+
+Published by hand on 2026-09-10, with no provenance attestation.
+
 - Add the `workspaceClaims` namespace, so an agent that created a workspace can
   hand it to a person as owner: `workspaceClaims.create({ email }, { idempotencyKey })`,
   `workspaceClaims.list()` and `workspaceClaims.revoke(claimId)`. All three

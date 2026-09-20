@@ -481,7 +481,10 @@ Version `0.1.0` is the initial contract, and was published by hand with no
 provenance attestation despite the `publishConfig.provenance` declaration; see
 [`RELEASING.md`](RELEASING.md). `0.2.0` is published and includes the breaking
 flow-idempotency changes listed in the changelog. Version `0.2.1` corrects
-paid-policy types; see its TypeScript compatibility note. Types are
+paid-policy types; see its TypeScript compatibility note. It was staged but
+never approved, so it is not on npm; `0.3.0`, also published by hand, carries
+it and adds workspace claims. `0.4.0` makes agent credentials last until
+revoked by default. Types are
 generated from the vendored Daykeeper OpenAPI commit recorded in
 [`openapi/SOURCE.md`](openapi/SOURCE.md); the SDK-to-contract mapping is in
 [`COMPATIBILITY.md`](COMPATIBILITY.md). Releases use the protected,
