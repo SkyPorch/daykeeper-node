@@ -1,11 +1,11 @@
 # Contract source
 
 `daykeeper.yaml` is an exact, byte-for-byte copy of `openapi/daykeeper.yaml`
-from `SkyPorch/daykeeper-openapi`, release tag `v1.3.0`, commit
-`067465edfc6c94e63867a6dd0d9db02e12683877`.
+from `SkyPorch/daykeeper-openapi`, release tag `v1.4.0`, commit
+`488cc39c3604882742c88b08d90a664e3d82e515`.
 
-- SHA-256: `3ecf230c04dc17fae561baf2b0df951c5bd5050c336adba2f06c177514edadd1`
-- Git blob: `f4f90ebd91e8bb641918f63af4862c83f81a289a`
+- SHA-256: `cc492c496fb4666fdcdf1906d821d0674d06470688fde71ce1ff3efdec5f9fe0`
+- Git blob: `9ac4330da396688d04572819c8cdcf4da7624079`
 
 The tag was created on the squash-merge commit of the reviewed contract pull
 request; the bytes match the reconciled branch head exactly, and the SHA-256
@@ -13,7 +13,16 @@ and Git blob above were re-verified against the tag.
 
 There is no local delta. This repository does not modify the vendored contract.
 
-The upstream change adds machine-owner workspace claims: `POST`/`GET`
+The upstream change in `1.4.0` (`daykeeper-openapi` PR #30) makes agent
+credentials last until they are revoked by default:
+`CreateAgentCredentialInput.validityDays` is `integer | null`, 1 through 365,
+default `null`, and `AgentCredential.expiresAt` is `string | null`. It matches
+the server change in `SkyPorch/daykeeper` PR #217. Upstream shipped the changed
+default as a minor bump on purpose, because the credential routes were still
+unreleased there.
+
+The previous pin, tag `v1.3.0`, commit
+`067465edfc6c94e63867a6dd0d9db02e12683877`, added machine-owner workspace claims: `POST`/`GET`
 `/v1/workspace-claims` and `POST /v1/workspace-claims/{claimId}/revoke`, the
 `WorkspaceClaim`, `CreateWorkspaceClaimInput`, `WorkspaceClaimCreated`,
 `WorkspaceClaimReplayed`, `WorkspaceClaimResult` and `WorkspaceClaimList`
@@ -121,5 +130,5 @@ are required for activation. The new SDK methods need the corresponding reviewed
 server version; older servers remain compatible with existing account-only
 methods.
 
-The source above is the immutable `v1.3.0` tag, so this pin satisfies
+The source above is the immutable `v1.4.0` tag, so this pin satisfies
 `RELEASING.md` step 2 for the 0.3.0 release.

@@ -17,7 +17,10 @@ export type CreateAgentCredentialInput = Omit<
   GeneratedCreateAgentCredentialInput,
   "validityDays"
 > & {
-  /** Defaults to 30 days when omitted. */
+  /**
+   * Days until the credential expires, 1 through 365. Omitted or `null`, the
+   * credential lasts until it is revoked.
+   */
   validityDays?: GeneratedCreateAgentCredentialInput["validityDays"];
 };
 export type CreateAgentCredentialResult =

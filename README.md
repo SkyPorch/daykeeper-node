@@ -305,9 +305,9 @@ creating another tenant or retrying a mutation. This method is available in
 
 ## Agent credentials (0.2.0+)
 
-Hosted OAuth is the preferred workload identity. When a headless environment
-cannot complete OAuth, a current human organization owner can create a named,
-expiring credential with only the scopes that workload needs:
+A current human organization owner can create a named credential for a server
+or workload, with only the scopes it needs. A credential lasts until it is
+revoked unless you pass `validityDays` (1 through 365):
 
 ```ts
 const result = await daykeeper.agentCredentials.create(
@@ -318,7 +318,8 @@ const result = await daykeeper.agentCredentials.create(
       "daykeeper.flows:read",
       "daykeeper.provisioning:read",
     ],
-    validityDays: 30,
+    // Optional. Omit it and the credential lasts until you revoke it.
+    // validityDays: 90,
   },
   { idempotencyKey: crypto.randomUUID() },
 );
@@ -338,8 +339,13 @@ const agent = new DaykeeperClient({
 });
 ```
 
-`apiKey` is the conventional static-credential path. Use `token` with a token
-provider for hosted OAuth and rotation; configure exactly one of them.
+`apiKey` is the conventional static-credential path. `token` takes a token
+provider instead, for a bearer you refresh yourself; configure exactly one of
+them. Hosted OAuth is not available yet.
+
+A credential without an expiry reports `expiresAt: null`. One created with
+`validityDays` stops working on its `expiresAt` date: create its replacement,
+deploy it, then revoke the old one.
 
 `agentCredentials.list()` returns bounded metadata only. Revoke immediately with
 `agentCredentials.revoke(id)`. A repeated exact create request returns the
