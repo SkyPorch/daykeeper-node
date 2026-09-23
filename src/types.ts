@@ -27,6 +27,23 @@ export type CreateAgentCredentialResult =
   Schemas["CreateAgentCredentialResult"];
 export type RevokeAgentCredentialResult =
   Schemas["RevokeAgentCredentialResult"];
+type GeneratedRotateAgentCredentialInput =
+  Schemas["RotateAgentCredentialInput"];
+export type RotateAgentCredentialInput = {
+  /**
+   * Hours the previous key keeps working, 0 through 168. Omitted, the server
+   * default of 24 applies; 0 revokes the previous key at once.
+   */
+  overlapHours?: GeneratedRotateAgentCredentialInput["overlapHours"];
+  /**
+   * Days until the new credential expires, 1 through 365. Omitted or `null`,
+   * it lasts until it is revoked.
+   */
+  validityDays?: GeneratedRotateAgentCredentialInput["validityDays"];
+};
+/** `token` is the new key's secret, revealed once; `null` on a replay. */
+export type RotateAgentCredentialResult =
+  Schemas["RotateAgentCredentialResult"];
 export type WorkspaceClaim = Schemas["WorkspaceClaim"];
 export type WorkspaceClaimState = Schemas["WorkspaceClaim"]["state"];
 export type CreateWorkspaceClaimInput = Schemas["CreateWorkspaceClaimInput"];

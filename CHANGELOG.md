@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.5.0 (unreleased)
+
+- Add `agentCredentials.rotate(credentialId, { overlapHours?, validityDays? },
+{ idempotencyKey })`. It replaces a key's secret and keeps its name, scopes
+  and tenant restriction; the result carries the new `credential`, the
+  `previousCredential` and the new `token`, revealed once. The previous key
+  keeps working for `overlapHours` (default 24, at most 168; 0 revokes it at
+  once). A workspace owner can rotate any key, and a server key can rotate
+  itself, which is how a long-running agent replaces a key that is about to
+  expire. The idempotency key is required: after an uncertain response, repeat
+  the call with the same key and input, because a key can be rotated only once.
+- `AgentCredential` gains optional `rotatedFromId`, `replacedById` and
+  `replacedAt`; `capabilities.agentCredentials.rotation` reports whether the
+  server can rotate.
+- A server replying to a request made with a key that expires within 14 days
+  sets the `Daykeeper-Credential-Expires-At` response header.
+- Requires a server with `SkyPorch/daykeeper` PR (agent credential rotation);
+  an older server answers the rotate call with 404. Vendors contract `1.6.0`
+  (unreleased branch head; re-pin to the `v1.6.0` tag before publishing).
+
 ## 0.4.0
 
 ### Breaking

@@ -1,25 +1,36 @@
 # Contract source
 
 `daykeeper.yaml` is an exact, byte-for-byte copy of `openapi/daykeeper.yaml`
-from `SkyPorch/daykeeper-openapi`, release tag `v1.4.0`, commit
-`488cc39c3604882742c88b08d90a664e3d82e515`.
+from `SkyPorch/daykeeper-openapi` branch `claude/agent-key-rotation`, commit
+`a38cb493083876b7f2823bcb78aed988e757af8a` (contract `1.6.0`, not yet tagged).
 
-- SHA-256: `cc492c496fb4666fdcdf1906d821d0674d06470688fde71ce1ff3efdec5f9fe0`
-- Git blob: `9ac4330da396688d04572819c8cdcf4da7624079`
+- SHA-256: `d734d255c993aacd8850f9ce1998954d6341384d2074326f4f3f91d91211b599`
+- Git blob: `34381c1d4a1438019f468c2401e33243463cd845`
 
-The tag was created on the squash-merge commit of the reviewed contract pull
-request; the bytes match the reconciled branch head exactly, and the SHA-256
-and Git blob above were re-verified against the tag.
+This pin is a branch head, not a tag, so it does NOT satisfy `RELEASING.md`
+step 2. Before 0.5.0 is released, the contract pull request must merge, `v1.6.0`
+must be tagged on the merge commit, and this file must be re-pinned to that tag
+(the bytes should not change).
 
 There is no local delta. This repository does not modify the vendored contract.
 
-The upstream change in `1.4.0` (`daykeeper-openapi` PR #30) makes agent
-credentials last until they are revoked by default:
-`CreateAgentCredentialInput.validityDays` is `integer | null`, 1 through 365,
-default `null`, and `AgentCredential.expiresAt` is `string | null`. It matches
-the server change in `SkyPorch/daykeeper` PR #217. Upstream shipped the changed
-default as a minor bump on purpose, because the credential routes were still
-unreleased there.
+`1.6.0` adds agent credential rotation: `POST
+/v1/agent-credentials/{agentCredentialId}/rotate` with a required
+`Idempotency-Key`, `RotateAgentCredentialInput` (`overlapHours` 0 through 168,
+default 24; `validityDays` as on create), and `RotateAgentCredentialResult`
+(`credential`, `previousCredential`, reveal-once `token`, `replayed`).
+`AgentCredential` gains optional `rotatedFromId`, `replacedById` and
+`replacedAt`, capabilities gain an optional `agentCredentials.rotation`, and the
+server-key scheme documents the `Daykeeper-Credential-Expires-At` header. It
+also carries the untagged `1.5.0` change on upstream main (tenant-scoped server
+keys: `tenantId`, lifecycle and erasure scopes).
+
+The previous pin, tag `v1.4.0`, commit
+`488cc39c3604882742c88b08d90a664e3d82e515`, made agent credentials last until
+they are revoked by default: `CreateAgentCredentialInput.validityDays` is
+`integer | null`, 1 through 365, default `null`, and `AgentCredential.expiresAt`
+is `string | null`. It matches the server change in `SkyPorch/daykeeper` PR
+#217.
 
 The previous pin, tag `v1.3.0`, commit
 `067465edfc6c94e63867a6dd0d9db02e12683877`, added machine-owner workspace claims: `POST`/`GET`
@@ -130,5 +141,5 @@ are required for activation. The new SDK methods need the corresponding reviewed
 server version; older servers remain compatible with existing account-only
 methods.
 
-The source above is the immutable `v1.4.0` tag, so this pin satisfies
-`RELEASING.md` step 2 for the 0.4.0 release.
+The source above is a branch head. Re-pin it to the immutable `v1.6.0` tag
+before releasing 0.5.0.
