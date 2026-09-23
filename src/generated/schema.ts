@@ -105,8 +105,10 @@ export interface paths {
          *     active credentials ahead of recent inactive history. `hasMore` reports
          *     omitted older history. Tokens and token hashes are never returned.
          *
-         *     Hosted OAuth remains the preferred workload identity. This list does
-         *     not create, renew, recover, rotate, or reactivate a credential.
+         *     This list does not create, renew, recover, rotate, or reactivate a
+         *     credential. `expiresAt` is null for a key that lasts until revoked; a
+         *     key that expires within 14 days needs rotating. `replacedById` is set
+         *     on a key that was rotated and is only kept working for its overlap.
          */
         get: operations["listAgentCredentials"];
         put?: never;
@@ -119,9 +121,14 @@ export interface paths {
          *     replay returns the original metadata with `token: null`; no secret can
          *     be recovered. Do not automatically retry this mutation with a new key.
          *
-         *     The credential expires, cannot administer credentials or members, and
-         *     can receive only the explicitly selected delegable scopes. Hosted OAuth
-         *     remains the preferred workload identity.
+         *     The server key cannot administer credentials or members and receives only
+         *     explicitly selected scopes held by its owner. An optional tenantId
+         *     restricts it to one tenant in the owner's organization. Lifecycle and
+         *     customer-deletion scopes require this restriction. The tenant may be
+         *     prepared before activation; a key does not enable customer traffic.
+         *     Keys last until revoked unless an explicit expiry is requested.
+         *     Server keys are the recommended authentication for a private backend
+         *     integration; OAuth remains supported.
          */
         post: operations["createAgentCredential"];
         delete?: never;
@@ -145,10 +152,74 @@ export interface paths {
          * Revoke an agent credential
          * @description Requires a current human organization owner and
          *     daykeeper.credentials:write. Revocation atomically disables the
-         *     underlying principal grant and is safe to repeat. It never creates,
-         *     replaces, recovers, or returns a secret.
+         *     underlying principal grant and is safe to repeat. It also revokes every
+         *     key this one produced by rotating itself. It never creates, replaces,
+         *     recovers, or returns a secret.
          */
         post: operations["revokeAgentCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-credentials/{agentCredentialId}/rotate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agentCredentialId: components["parameters"]["AgentCredentialId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Replace an agent credential's secret
+         * @description Issues a new server key with the same name, scopes and tenant
+         *     restriction, and returns its token exactly once. Either a current human
+         *     organization owner holding daykeeper.credentials:write and every scope
+         *     the key carries, or the server key itself (authenticated with the key
+         *     being rotated) may call it. A server key can rotate only itself.
+         *
+         *     The previous key keeps working for `overlapHours` (default 24, at most
+         *     168) so a deployment can switch to the new secret without an outage,
+         *     and never longer than its own expiry. `overlapHours: 0` revokes it at
+         *     once.
+         *
+         *     A server key rotating itself must not send `overlapHours: 0`. It
+         *     revokes the key making the call, so if the response is lost the agent
+         *     can neither authenticate a replay nor use the recovery below, and only
+         *     an owner can issue it a new key. Deployed servers accept it today; a
+         *     server may reject it with INVALID_INPUT (400). An owner may still use
+         *     0 to cut a key off at once.
+         *
+         *     Lifetime: `validityDays` omitted keeps the rotated key's policy (a key
+         *     that never expires, or one issued before agent credentials stopped
+         *     expiring by default, gets a key that lasts until revoked; otherwise the
+         *     same lifetime again); `null` lasts until revoked; a number is days. A
+         *     server key rotating itself never gets a later expiry than it already
+         *     had, whatever it asks for.
+         *
+         *     Revoking a key also revokes every key it produced by rotating itself.
+         *     Rotations are limited per organization (with the same 25 unexpired-key
+         *     ceiling as creation, counting keys still in an overlap), and a chain of
+         *     keys rotating themselves may rotate at most 5 times a day.
+         *
+         *     An owner rotates a key once: rotating a revoked or already replaced key
+         *     answers RESOURCE_STATE_CONFLICT. The same Idempotency-Key may be
+         *     submitted again only with the exact original body; a replay returns the
+         *     original metadata with `token: null` and the secret cannot be
+         *     recovered. A server key that rotated itself and lost the response may,
+         *     while it still works, call rotate again with a new Idempotency-Key: the
+         *     successor it never used is revoked and a fresh one is issued. A
+         *     successor that has already been used is never replaced this way.
+         *
+         *     Responses to a server-key request carry
+         *     `Daykeeper-Credential-Expires-At` when that key expires within 14
+         *     days, so an agent can rotate before it stops working.
+         */
+        post: operations["rotateAgentCredential"];
         delete?: never;
         options?: never;
         head?: never;
@@ -256,10 +327,13 @@ export interface paths {
         put?: never;
         /**
          * Create a short-lived tenant gateway token
-         * @description Exchanges the caller's tenant-bound service identity for a token that
+         * @description Exchanges a Daykeeper server key or OAuth service identity for a token that
          *     can be used only at the customer gateway. Customer context selects
          *     support presentation and never grants product entitlement. Lifecycle
-         *     and erasure purposes require their own OAuth scopes.
+         *     and erasure purposes require daykeeper.lifecycle:write and
+         *     daykeeper.customers:delete respectively, in addition to
+         *     daykeeper.customer-sessions:write. A tenant-restricted server key
+         *     cannot mint a token for another tenant.
          */
         post: operations["createCustomerSession"];
         delete?: never;
@@ -1116,13 +1190,17 @@ export interface components {
                 /** @constant */
                 scope: "organization";
             };
-            /** @description Optional on older servers. Enabled discovery does not grant owner authority or credential scopes. */
+            /** @description Optional on older servers. Enabled discovery does not grant owner authority or credential scopes. Open to fields added in later minor versions. */
             agentCredentials?: {
                 enabled: boolean;
                 /** @constant */
                 reveal: "once";
                 /** @constant */
                 maximumValidityDays: 90;
+                /** @description Optional on older servers. True when POST /v1/agent-credentials/{agentCredentialId}/rotate is available. */
+                rotation?: boolean;
+            } & {
+                [key: string]: unknown;
             };
             /**
              * @description Optional on older servers. True when the management API can issue
@@ -1807,10 +1885,11 @@ export interface components {
             revokedAt: string | null;
         };
         /**
-         * @description A scope that a human owner may delegate to a headless agent credential.
+         * @description A scope that a human owner may delegate to a server key.
          * @enum {string}
          */
-        AgentCredentialScope: "daykeeper.accounts:read" | "daykeeper.accounts:write" | "daykeeper.flows:read" | "daykeeper.flows:write" | "daykeeper.flows:publish" | "daykeeper.provisioning:read" | "daykeeper.provisioning:apply" | "daykeeper.billing:read";
+        AgentCredentialScope: "daykeeper.accounts:read" | "daykeeper.accounts:write" | "daykeeper.flows:read" | "daykeeper.flows:write" | "daykeeper.flows:publish" | "daykeeper.flows:operate" | "daykeeper.provisioning:read" | "daykeeper.provisioning:apply" | "daykeeper.billing:read" | "daykeeper.customer-sessions:write" | "daykeeper.conversations:read" | "daykeeper.conversations:write" | "daykeeper.lifecycle:write" | "daykeeper.customers:delete";
+        /** @description Credential metadata. Open to fields added in later minor versions, but never carries a secret. */
         AgentCredential: {
             /** Format: uuid */
             id: string;
@@ -1819,6 +1898,11 @@ export interface components {
              * @description Organization derived from the authenticated owner.
              */
             organizationId: string;
+            /**
+             * Format: uuid
+             * @description Null for an organization-wide key; otherwise restricts this key to this tenant. Lifecycle and customer-deletion scopes require a tenant binding. Current servers always send it; servers before tenant-scoped keys omit it, which means organization-wide.
+             */
+            tenantId?: string | null;
             name: string;
             /** @description Bounded display hint; never usable as a bearer credential. */
             hint: string;
@@ -1836,13 +1920,39 @@ export interface components {
             revokedAt: string | null;
             /** Format: date-time */
             createdAt: string;
+            /**
+             * Format: uuid
+             * @description Optional on older servers. The credential this one replaced, when it was issued by rotation.
+             */
+            rotatedFromId?: string | null;
+            /**
+             * Format: uuid
+             * @description Optional on older servers. The credential that replaced this one. A replaced key keeps working only until its `expiresAt`, the end of the rotation overlap.
+             */
+            replacedById?: string | null;
+            /**
+             * Format: date-time
+             * @description Optional on older servers. When this credential was rotated.
+             */
+            replacedAt?: string | null;
+            token?: never;
+            tokenHash?: never;
+        } & {
+            [key: string]: unknown;
         };
         AgentCredentialPage: {
             items: components["schemas"]["AgentCredential"][];
             /** @description True when older inactive history was omitted. */
             hasMore: boolean;
+        } & {
+            [key: string]: unknown;
         };
         CreateAgentCredentialInput: {
+            /**
+             * Format: uuid
+             * @description When present, restricts this key to this tenant within its organization. Lifecycle and customer-deletion scopes require tenantId.
+             */
+            tenantId?: string;
             name: string;
             scopes: components["schemas"]["AgentCredentialScope"][];
             /**
@@ -1850,17 +1960,40 @@ export interface components {
              * @default null
              */
             validityDays: number | null;
-        };
+        } & (unknown & unknown);
         /** @description A fresh result has a token and replayed false; a replay has token null and replayed true. */
         CreateAgentCredentialResult: {
             credential: components["schemas"]["AgentCredential"];
             /** @description Sensitive bearer token revealed only on the original successful response. Never log or persist it outside a secret manager. */
             token: string | null;
             replayed: boolean;
+        } & {
+            [key: string]: unknown;
         };
         RevokeAgentCredentialResult: {
             credential: components["schemas"]["AgentCredential"];
             replayed: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        RotateAgentCredentialInput: {
+            /**
+             * @description Hours the previous key keeps working, never beyond its own expiry. 0 revokes it at once. A server key rotating itself must send at least 1, because 0 leaves it no way to recover a lost response; a server may reject 0 from a server key with INVALID_INPUT.
+             * @default 24
+             */
+            overlapHours: number;
+            /** @description Days until the new credential expires; null lasts until it is revoked. Omitted keeps the rotated key's policy. A server key rotating itself is capped at its own current expiry. */
+            validityDays?: number | null;
+        };
+        /** @description A fresh result has a token and replayed false; a replay has token null and replayed true. */
+        RotateAgentCredentialResult: {
+            credential: components["schemas"]["AgentCredential"];
+            previousCredential: components["schemas"]["AgentCredential"];
+            /** @description Sensitive bearer token for the new credential, revealed only on the original successful response. Never log or persist it outside a secret manager. */
+            token: string | null;
+            replayed: boolean;
+        } & {
+            [key: string]: unknown;
         };
         /**
          * @description An owner invitation issued by a machine owner. It reuses the existing
@@ -2009,6 +2142,9 @@ export interface components {
         RevokeAgentCredentialResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["RevokeAgentCredentialResult"];
         };
+        RotateAgentCredentialResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["RotateAgentCredentialResult"];
+        };
         WorkspaceClaimResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["WorkspaceClaim"];
         };
@@ -2109,6 +2245,7 @@ export interface components {
         /** @description Structured Daykeeper error. Resource denials do not disclose cross-tenant existence. */
         Error: {
             headers: {
+                "Daykeeper-Credential-Expires-At": components["headers"]["DaykeeperCredentialExpiresAt"];
                 /** @description Correlation identifier shared with support and audit logs. */
                 "X-Request-Id"?: string;
                 /** @description Seconds to wait when the response is retryable and rate limited. */
@@ -2238,7 +2375,15 @@ export interface components {
         WorkspaceClaimId: string;
     };
     requestBodies: never;
-    headers: never;
+    headers: {
+        /**
+         * @description Sent only on a response to a request authenticated with a Daykeeper
+         *     server key that expires within 14 days: the RFC 3339 instant it stops
+         *     working. Rotate the key before then. Absent for OAuth and machine-owner
+         *     callers, for a key that lasts until revoked, and on older servers.
+         */
+        DaykeeperCredentialExpiresAt: string;
+    };
     pathItems: never;
 }
 export type $defs = Record<string, never>;
@@ -2447,6 +2592,72 @@ export interface operations {
             default: components["responses"]["Error"];
         };
     };
+    rotateAgentCredential: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description A caller-generated key reused only for an exact logical mutation. The
+                 *     key is bound to the request the first time it is applied. Repeating that
+                 *     exact request with the same key returns the stored original result
+                 *     instead of writing again, and the operation reports the repeat as a
+                 *     replay. Reusing the key for a different request is rejected and no write
+                 *     is applied. A missing or malformed key is rejected with INVALID_INPUT
+                 *     (400). Use the same key to reconcile a request whose outcome is unknown;
+                 *     do not retry an uncertain mutation under a new key.
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                agentCredentialId: components["parameters"]["AgentCredentialId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RotateAgentCredentialInput"];
+            };
+        };
+        responses: {
+            /** @description The exact original request was replayed; the new secret is no longer available. */
+            200: {
+                headers: {
+                    /** @description Reveal-once results must not be cached. */
+                    "Cache-Control"?: "no-store";
+                    "Daykeeper-Credential-Expires-At": components["headers"]["DaykeeperCredentialExpiresAt"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RotateAgentCredentialResponse"];
+                };
+            };
+            /** @description A replacement credential was created and its secret is revealed exactly once. */
+            201: {
+                headers: {
+                    /** @description Reveal-once results must not be cached. */
+                    "Cache-Control"?: "no-store";
+                    "Daykeeper-Credential-Expires-At": components["headers"]["DaykeeperCredentialExpiresAt"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RotateAgentCredentialResponse"];
+                };
+            };
+            /** @description Invalid input or a missing Idempotency-Key (INVALID_INPUT). */
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            /** @description Not an owner holding the key's scopes, or a server key rotating a different key (ORGANIZATION_ACCESS_REQUIRED). */
+            403: components["responses"]["Error"];
+            /** @description No such credential in the caller's organization (RESOURCE_NOT_FOUND). */
+            404: components["responses"]["Error"];
+            /** @description The key is revoked or already rotated (RESOURCE_STATE_CONFLICT), the Idempotency-Key was reused for different input (IDEMPOTENCY_KEY_REUSED), or the active credential limit was reached (CREDENTIAL_LIMIT_REACHED). */
+            409: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+            /** @description Agent credential management is not enabled (FEATURE_UNAVAILABLE). */
+            503: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
     planTenant: {
         parameters: {
             query?: never;
@@ -2611,6 +2822,7 @@ export interface operations {
             /** @description A short-lived, audience-bound gateway token. */
             201: {
                 headers: {
+                    "Daykeeper-Credential-Expires-At": components["headers"]["DaykeeperCredentialExpiresAt"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3206,6 +3418,7 @@ export interface operations {
             /** @description Bounded tenant conversation list. */
             200: {
                 headers: {
+                    "Daykeeper-Credential-Expires-At": components["headers"]["DaykeeperCredentialExpiresAt"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3232,6 +3445,7 @@ export interface operations {
             /** @description Bounded conversation messages. */
             200: {
                 headers: {
+                    "Daykeeper-Credential-Expires-At": components["headers"]["DaykeeperCredentialExpiresAt"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3263,6 +3477,7 @@ export interface operations {
             /** @description Reply accepted by the provider. */
             201: {
                 headers: {
+                    "Daykeeper-Credential-Expires-At": components["headers"]["DaykeeperCredentialExpiresAt"];
                     [name: string]: unknown;
                 };
                 content: {

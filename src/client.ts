@@ -30,6 +30,8 @@ import type {
   Operation,
   PublishFlowVersionInput,
   RevokeAgentCredentialResult,
+  RotateAgentCredentialInput,
+  RotateAgentCredentialResult,
   Tenant,
   TenantPlan,
   TenantSpec,
@@ -58,6 +60,7 @@ const ALLOWED_PATHS: readonly RegExp[] = [
   "/v1/usage",
   "/v1/agent-credentials",
   `/v1/agent-credentials/${SEGMENT}/revoke`,
+  `/v1/agent-credentials/${SEGMENT}/rotate`,
   "/v1/workspace-claims",
   `/v1/workspace-claims/${SEGMENT}/revoke`,
   "/v1/tenant-plans",
@@ -171,6 +174,19 @@ export class DaykeeperClient {
       credentialId: string,
       options?: DaykeeperRequestOptions,
     ) => Promise<RevokeAgentCredentialResult>;
+    /**
+     * Replace a key's secret, keeping its name, scopes and tenant. Call it as
+     * a workspace owner, or with the key being rotated (a key may rotate only
+     * itself). The new token is returned once; the old key keeps working for
+     * `overlapHours` (default 24). Requires an explicit idempotency key: after
+     * an uncertain response, repeat with the same key and input, never a new
+     * one, because a key can be rotated only once.
+     */
+    rotate: (
+      credentialId: string,
+      input: RotateAgentCredentialInput,
+      options: DaykeeperIdempotencyOptions,
+    ) => Promise<RotateAgentCredentialResult>;
   };
   readonly workspaceClaims: {
     /**
@@ -378,6 +394,17 @@ export class DaykeeperClient {
             method: "POST",
             body: {},
             signal: requestOptions.signal,
+          },
+        ),
+      rotate: (credentialId, input, requestOptions) =>
+        this.#request(
+          `/v1/agent-credentials/${pathSegment(credentialId)}/rotate`,
+          {
+            method: "POST",
+            body: input ?? {},
+            idempotencyKey: requestOptions?.idempotencyKey,
+            requireIdempotencyKey: true,
+            signal: requestOptions?.signal,
           },
         ),
     };

@@ -1,25 +1,45 @@
 # Contract source
 
 `daykeeper.yaml` is an exact, byte-for-byte copy of `openapi/daykeeper.yaml`
-from `SkyPorch/daykeeper-openapi`, release tag `v1.4.0`, commit
-`488cc39c3604882742c88b08d90a664e3d82e515`.
+from `SkyPorch/daykeeper-openapi` tag `v1.6.0`, commit
+`f563df6fffca80d7d2c634e270604b6e61561152` (contract `1.6.0`, the squash merge
+of `daykeeper-openapi` PR #34).
 
-- SHA-256: `cc492c496fb4666fdcdf1906d821d0674d06470688fde71ce1ff3efdec5f9fe0`
-- Git blob: `9ac4330da396688d04572819c8cdcf4da7624079`
-
-The tag was created on the squash-merge commit of the reviewed contract pull
-request; the bytes match the reconciled branch head exactly, and the SHA-256
-and Git blob above were re-verified against the tag.
+- SHA-256: `0e3c3b6d3d524366169c829164c85caa67b86445eea07e5b4d0979c0e230ff69`
+- Git blob: `e8bfa74803c11bbab03889523dbd261f386271c6`
 
 There is no local delta. This repository does not modify the vendored contract.
 
-The upstream change in `1.4.0` (`daykeeper-openapi` PR #30) makes agent
-credentials last until they are revoked by default:
-`CreateAgentCredentialInput.validityDays` is `integer | null`, 1 through 365,
-default `null`, and `AgentCredential.expiresAt` is `string | null`. It matches
-the server change in `SkyPorch/daykeeper` PR #217. Upstream shipped the changed
-default as a minor bump on purpose, because the credential routes were still
-unreleased there.
+`1.6.0` adds agent credential rotation: `POST
+/v1/agent-credentials/{agentCredentialId}/rotate` with a required
+`Idempotency-Key`, `RotateAgentCredentialInput` (`overlapHours` 0 through 168,
+default 24; `validityDays` as on create), and `RotateAgentCredentialResult`
+(`credential`, `previousCredential`, reveal-once `token`, `replayed`).
+`AgentCredential` gains optional `rotatedFromId`, `replacedById` and
+`replacedAt`, and capabilities gain an optional `agentCredentials.rotation`.
+The reusable `DaykeeperCredentialExpiresAt` header
+(`Daykeeper-Credential-Expires-At`) is declared on every 2xx of the five
+server-key operations and on `Error`. A server key rotating itself must not
+send `overlapHours: 0`, and a server may reject it with `INVALID_INPUT`. It
+also carries the untagged `1.5.0` change on upstream main (tenant-scoped server
+keys: `tenantId`, lifecycle and erasure scopes).
+
+The review fixes merged with it: `AgentCredential`, `AgentCredentialPage`, the
+create, revoke and rotate results, and `capabilities.agentCredentials` now set
+`additionalProperties: true`, as the upstream `VERSIONING.md` requires of
+response schemas. The regenerated types gain an index signature, and
+`AgentCredential` forbids `token` and `tokenHash` (`never`).
+`AgentCredential.tenantId` is optional, because servers before tenant-scoped
+keys omit it; absent means organization-wide. The contract's conditional
+tenant and scope rules on `CreateAgentCredentialInput` generate no types, so
+`src/types.ts` exports that input as a discriminated union instead.
+
+The previous pin, tag `v1.4.0`, commit
+`488cc39c3604882742c88b08d90a664e3d82e515`, made agent credentials last until
+they are revoked by default: `CreateAgentCredentialInput.validityDays` is
+`integer | null`, 1 through 365, default `null`, and `AgentCredential.expiresAt`
+is `string | null`. It matches the server change in `SkyPorch/daykeeper` PR
+#217.
 
 The previous pin, tag `v1.3.0`, commit
 `067465edfc6c94e63867a6dd0d9db02e12683877`, added machine-owner workspace claims: `POST`/`GET`
@@ -130,5 +150,5 @@ are required for activation. The new SDK methods need the corresponding reviewed
 server version; older servers remain compatible with existing account-only
 methods.
 
-The source above is the immutable `v1.4.0` tag, so this pin satisfies
-`RELEASING.md` step 2 for the 0.4.0 release.
+The source above is the immutable `v1.6.0` tag, which satisfies `RELEASING.md`
+step 2 for 0.5.0.

@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.5.0 (unreleased)
+
+- Add `agentCredentials.rotate(credentialId, { overlapHours?, validityDays? },
+{ idempotencyKey })`. It replaces a key's secret and keeps its name, scopes
+  and tenant restriction; the result carries the new `credential`, the
+  `previousCredential` and the new `token`, revealed once. The previous key
+  keeps working for `overlapHours` (default 24, at most 168; 0 revokes it at
+  once). A workspace owner can rotate any key, and a server key can rotate
+  itself, which is how a long-running agent replaces a key that is about to
+  expire. `validityDays` omitted keeps the rotated key's policy; a key
+  rotating itself never gets a later expiry than it had. Revoking a key also
+  revokes the keys it rotated itself into. The idempotency key is required:
+  after an uncertain response, repeat the call with the same key and input; if
+  that replay returns `token: null`, a key that rotated itself may call again
+  with a new idempotency key while it still works, which supersedes the unused
+  successor.
+- `AgentCredential` gains optional `rotatedFromId`, `replacedById` and
+  `replacedAt`; `capabilities.agentCredentials.rotation` reports whether the
+  server can rotate.
+- A server replying to a request made with a key that expires within 14 days
+  sets the `Daykeeper-Credential-Expires-At` response header.
+- A key rotating itself must pass `overlapHours` of at least 1: 0 revokes the
+  caller at once, so a lost response leaves it no way to recover, and a server
+  may reject it with `INVALID_INPUT`.
+- `CreateAgentCredentialInput` is a discriminated union: an organization-wide
+  key takes `OrganizationAgentCredentialScope`s, and a key with `tenantId`
+  takes `TenantAgentCredentialScope`s (customer sessions, lifecycle, customer
+  deletion). A lifecycle or erasure scope without `tenantId`, or an account
+  scope with it, is now a type error, not a server rejection.
+- `AgentCredential.tenantId` is optional, because servers before tenant-scoped
+  keys omit it. Treat absent as organization-wide. Agent credential response
+  types accept fields a later contract minor version adds.
+- Requires a server with agent credential rotation (`SkyPorch/daykeeper`
+  migration 0105); an older server answers the rotate call with 404. Vendors
+  contract `1.6.0`, tag `v1.6.0`, commit
+  `f563df6fffca80d7d2c634e270604b6e61561152`.
+
 ## 0.4.0
 
 ### Breaking
