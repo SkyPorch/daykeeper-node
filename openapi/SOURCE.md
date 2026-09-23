@@ -2,10 +2,10 @@
 
 `daykeeper.yaml` is an exact, byte-for-byte copy of `openapi/daykeeper.yaml`
 from `SkyPorch/daykeeper-openapi` branch `claude/agent-key-rotation`, commit
-`a38cb493083876b7f2823bcb78aed988e757af8a` (contract `1.6.0`, not yet tagged).
+`a095fef618ac946e0a6a64d65db677c818236891` (contract `1.6.0`, not yet tagged).
 
-- SHA-256: `d734d255c993aacd8850f9ce1998954d6341384d2074326f4f3f91d91211b599`
-- Git blob: `34381c1d4a1438019f468c2401e33243463cd845`
+- SHA-256: `ec9b1e6c5c7bfb13859b2ebcbafa2fda3f4f08bf27dcaaf30d2f3ed8a0235c71`
+- Git blob: `5a113a0497df9b6a574d27be8598130fef4f2735`
 
 This pin is a branch head, not a tag, so it does NOT satisfy `RELEASING.md`
 step 2. Before 0.5.0 is released, the contract pull request must merge, `v1.6.0`

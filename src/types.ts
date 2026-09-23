@@ -36,8 +36,9 @@ export type RotateAgentCredentialInput = {
    */
   overlapHours?: GeneratedRotateAgentCredentialInput["overlapHours"];
   /**
-   * Days until the new credential expires, 1 through 365. Omitted or `null`,
-   * it lasts until it is revoked.
+   * Days until the new credential expires, 1 through 365; `null` lasts until
+   * it is revoked. Omitted keeps the rotated key's policy. A key rotating
+   * itself never gets a later expiry than it already had.
    */
   validityDays?: GeneratedRotateAgentCredentialInput["validityDays"];
 };

@@ -9,8 +9,13 @@
   keeps working for `overlapHours` (default 24, at most 168; 0 revokes it at
   once). A workspace owner can rotate any key, and a server key can rotate
   itself, which is how a long-running agent replaces a key that is about to
-  expire. The idempotency key is required: after an uncertain response, repeat
-  the call with the same key and input, because a key can be rotated only once.
+  expire. `validityDays` omitted keeps the rotated key's policy; a key
+  rotating itself never gets a later expiry than it had. Revoking a key also
+  revokes the keys it rotated itself into. The idempotency key is required:
+  after an uncertain response, repeat the call with the same key and input; if
+  that replay returns `token: null`, a key that rotated itself may call again
+  with a new idempotency key while it still works, which supersedes the unused
+  successor.
 - `AgentCredential` gains optional `rotatedFromId`, `replacedById` and
   `replacedAt`; `capabilities.agentCredentials.rotation` reports whether the
   server can rotate.
@@ -18,7 +23,7 @@
   sets the `Daykeeper-Credential-Expires-At` response header.
 - Requires a server with `SkyPorch/daykeeper` PR (agent credential rotation);
   an older server answers the rotate call with 404. Vendors contract `1.6.0`
-  (unreleased branch head; re-pin to the `v1.6.0` tag before publishing).
+  (unreleased branch head a095fef; re-pin to the `v1.6.0` tag before publishing).
 
 ## 0.4.0
 
