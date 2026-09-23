@@ -13,16 +13,45 @@ export type AgentCredential = Schemas["AgentCredential"];
 export type AgentCredentialPage = Schemas["AgentCredentialPage"];
 type GeneratedCreateAgentCredentialInput =
   Schemas["CreateAgentCredentialInput"];
-export type CreateAgentCredentialInput = Omit<
-  GeneratedCreateAgentCredentialInput,
-  "validityDays"
-> & {
+/** Scopes only a tenant-bound key may carry; they require `tenantId`. */
+export type TenantOnlyAgentCredentialScope = Extract<
+  AgentCredentialScope,
+  "daykeeper.lifecycle:write" | "daykeeper.customers:delete"
+>;
+/** Every scope a tenant-bound key (one created with `tenantId`) may carry. */
+export type TenantAgentCredentialScope = Extract<
+  AgentCredentialScope,
+  "daykeeper.customer-sessions:write" | TenantOnlyAgentCredentialScope
+>;
+/** Every scope an organization-wide key (no `tenantId`) may carry. */
+export type OrganizationAgentCredentialScope = Exclude<
+  AgentCredentialScope,
+  TenantOnlyAgentCredentialScope
+>;
+type CreateAgentCredentialFields = {
+  name: GeneratedCreateAgentCredentialInput["name"];
   /**
    * Days until the credential expires, 1 through 365. Omitted or `null`, the
    * credential lasts until it is revoked.
    */
   validityDays?: GeneratedCreateAgentCredentialInput["validityDays"];
 };
+/**
+ * An organization-wide key, or one bound to a tenant with `tenantId`. The
+ * contract's conditional rules generate no types, so they are spelled out
+ * here: lifecycle and customer-deletion scopes require `tenantId`, and a
+ * tenant-bound key may carry only customer-session, lifecycle and
+ * customer-deletion scopes. The server rejects anything else.
+ */
+export type CreateAgentCredentialInput =
+  | (CreateAgentCredentialFields & {
+      tenantId?: undefined;
+      scopes: OrganizationAgentCredentialScope[];
+    })
+  | (CreateAgentCredentialFields & {
+      tenantId: string;
+      scopes: TenantAgentCredentialScope[];
+    });
 export type CreateAgentCredentialResult =
   Schemas["CreateAgentCredentialResult"];
 export type RevokeAgentCredentialResult =
@@ -32,7 +61,9 @@ type GeneratedRotateAgentCredentialInput =
 export type RotateAgentCredentialInput = {
   /**
    * Hours the previous key keeps working, 0 through 168. Omitted, the server
-   * default of 24 applies; 0 revokes the previous key at once.
+   * default of 24 applies; 0 revokes the previous key at once. A key rotating
+   * itself must pass at least 1: 0 revokes the caller, so a lost response
+   * leaves it no way to recover, and a server may reject it.
    */
   overlapHours?: GeneratedRotateAgentCredentialInput["overlapHours"];
   /**

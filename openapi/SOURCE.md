@@ -1,16 +1,12 @@
 # Contract source
 
 `daykeeper.yaml` is an exact, byte-for-byte copy of `openapi/daykeeper.yaml`
-from `SkyPorch/daykeeper-openapi` branch `claude/agent-key-rotation`, commit
-`a095fef618ac946e0a6a64d65db677c818236891` (contract `1.6.0`, not yet tagged).
+from `SkyPorch/daykeeper-openapi` tag `v1.6.0`, commit
+`f563df6fffca80d7d2c634e270604b6e61561152` (contract `1.6.0`, the squash merge
+of `daykeeper-openapi` PR #34).
 
-- SHA-256: `ec9b1e6c5c7bfb13859b2ebcbafa2fda3f4f08bf27dcaaf30d2f3ed8a0235c71`
-- Git blob: `5a113a0497df9b6a574d27be8598130fef4f2735`
-
-This pin is a branch head, not a tag, so it does NOT satisfy `RELEASING.md`
-step 2. Before 0.5.0 is released, the contract pull request must merge, `v1.6.0`
-must be tagged on the merge commit, and this file must be re-pinned to that tag
-(the bytes should not change).
+- SHA-256: `0e3c3b6d3d524366169c829164c85caa67b86445eea07e5b4d0979c0e230ff69`
+- Git blob: `e8bfa74803c11bbab03889523dbd261f386271c6`
 
 There is no local delta. This repository does not modify the vendored contract.
 
@@ -20,10 +16,23 @@ There is no local delta. This repository does not modify the vendored contract.
 default 24; `validityDays` as on create), and `RotateAgentCredentialResult`
 (`credential`, `previousCredential`, reveal-once `token`, `replayed`).
 `AgentCredential` gains optional `rotatedFromId`, `replacedById` and
-`replacedAt`, capabilities gain an optional `agentCredentials.rotation`, and the
-server-key scheme documents the `Daykeeper-Credential-Expires-At` header. It
+`replacedAt`, and capabilities gain an optional `agentCredentials.rotation`.
+The reusable `DaykeeperCredentialExpiresAt` header
+(`Daykeeper-Credential-Expires-At`) is declared on every 2xx of the five
+server-key operations and on `Error`. A server key rotating itself must not
+send `overlapHours: 0`, and a server may reject it with `INVALID_INPUT`. It
 also carries the untagged `1.5.0` change on upstream main (tenant-scoped server
 keys: `tenantId`, lifecycle and erasure scopes).
+
+The review fixes merged with it: `AgentCredential`, `AgentCredentialPage`, the
+create, revoke and rotate results, and `capabilities.agentCredentials` now set
+`additionalProperties: true`, as the upstream `VERSIONING.md` requires of
+response schemas. The regenerated types gain an index signature, and
+`AgentCredential` forbids `token` and `tokenHash` (`never`).
+`AgentCredential.tenantId` is optional, because servers before tenant-scoped
+keys omit it; absent means organization-wide. The contract's conditional
+tenant and scope rules on `CreateAgentCredentialInput` generate no types, so
+`src/types.ts` exports that input as a discriminated union instead.
 
 The previous pin, tag `v1.4.0`, commit
 `488cc39c3604882742c88b08d90a664e3d82e515`, made agent credentials last until
@@ -141,5 +150,5 @@ are required for activation. The new SDK methods need the corresponding reviewed
 server version; older servers remain compatible with existing account-only
 methods.
 
-The source above is a branch head. Re-pin it to the immutable `v1.6.0` tag
-before releasing 0.5.0.
+The source above is the immutable `v1.6.0` tag, which satisfies `RELEASING.md`
+step 2 for 0.5.0.

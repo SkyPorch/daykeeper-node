@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { DaykeeperClient } from "../src/index.js";
+import {
+  DaykeeperClient,
+  type AgentCredential,
+  type CreateAgentCredentialInput,
+} from "../src/index.js";
 
 const previous = {
   id: "30000000-0000-4000-8000-000000000001",
@@ -115,4 +119,37 @@ test("rotate does not automatically retry an uncertain response", async () => {
     ),
   );
   assert.equal(calls, 1);
+});
+
+test("create input types keep the tenant and scope rules the server enforces", () => {
+  const organizationWide: CreateAgentCredentialInput = {
+    name: "Reporting",
+    scopes: ["daykeeper.accounts:read", "daykeeper.customer-sessions:write"],
+  };
+  const tenantBound: CreateAgentCredentialInput = {
+    name: "Support backend",
+    tenantId: "20000000-0000-4000-8000-000000000001",
+    scopes: ["daykeeper.customer-sessions:write", "daykeeper.lifecycle:write"],
+  };
+  // @ts-expect-error lifecycle and erasure scopes require tenantId
+  const unbound: CreateAgentCredentialInput = {
+    name: "Lifecycle without a tenant",
+    scopes: ["daykeeper.lifecycle:write"],
+  };
+  // @ts-expect-error a tenant-bound key cannot administer the workspace
+  const tooBroad: CreateAgentCredentialInput = {
+    name: "Tenant key with account scopes",
+    tenantId: "20000000-0000-4000-8000-000000000001",
+    scopes: ["daykeeper.accounts:read"],
+  };
+  assert.equal(organizationWide.tenantId, undefined);
+  assert.equal(tenantBound.scopes.length, 2);
+  assert.ok(unbound && tooBroad);
+});
+
+test("a credential from a server before tenant-scoped keys still types", () => {
+  const { tenantId: _omitted, ...older } = previous;
+  const fromOlderServer: AgentCredential = older;
+  // Absent means organization-wide.
+  assert.equal(fromOlderServer.tenantId ?? null, null);
 });
