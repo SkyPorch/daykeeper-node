@@ -1,5 +1,7 @@
 # `@skyporch/daykeeper`
 
+For more about Daykeeper, visit [mydaykeeper.com](https://www.mydaykeeper.com).
+
 The official, zero-runtime-dependency TypeScript and Node.js client for the
 Daykeeper management API. It is designed for both human-built applications and
 autonomous agents: every mutation has a typed input, provisioning uses
