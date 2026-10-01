@@ -9,7 +9,7 @@ a release.
 
 | SDK version | Management contract | Contract tag | Contract commit                            | Notes                                                                                                                                                        |
 | ----------- | ------------------- | ------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 0.5.0       | 1.6.0               | `v1.6.0`     | `f563df6fffca80d7d2c634e270604b6e61561152` | Adds `agentCredentials.rotate`.                                                                                                                              |
+| 0.5.0       | 1.6.0               | `v1.6.0`     | `f563df6fffca80d7d2c634e270604b6e61561152` | Adds `agentCredentials.rotate` (needs server migration 0105) and tenant-bound key scopes; `CreateAgentCredentialInput` is stricter.                          |
 | 0.4.0       | 1.4.0               | `v1.4.0`     | `488cc39c3604882742c88b08d90a664e3d82e515` | Agent credentials last until revoked by default; `expiresAt` is nullable.                                                                                    |
 | 0.3.0       | 1.3.0               | `v1.3.0`     | `067465edfc6c94e63867a6dd0d9db02e12683877` | Published by hand with no provenance attestation. Adds machine-owner workspace claims.                                                                       |
 | 0.2.1       | 1.2.0               | `v1.2.0`     | `3140bbab0b683371ee1b1c17ff8db67a9ae1fa68` | Correct existing paid-policy types and provisioning schema branches; no runtime request changes. Staged but never approved, so not on npm; 0.3.0 carries it. |
@@ -18,6 +18,11 @@ a release.
 | 0.1.0       | 0.1.0               | `v1.0.0`     | `35f5bd45fe0c6a6901766543bff90dae6838b965` | Published by hand with no provenance attestation.                                                                                                            |
 
 ## Server requirement
+
+The 0.5.0 `agentCredentials.rotate` method requires a server with agent
+credential rotation (`SkyPorch/daykeeper` migration 0105); check
+`capabilities().agentCredentials.rotation` first. An older server answers the
+rotate call with 404.
 
 The 0.3.0 `workspaceClaims` methods require a server that implements
 the workspace claim routes and has a console origin configured; check

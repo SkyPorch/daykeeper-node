@@ -346,8 +346,12 @@ provider instead, for a bearer you refresh yourself; configure exactly one of
 them. Hosted OAuth is not available yet.
 
 A credential without an expiry reports `expiresAt: null`. One created with
-`validityDays` stops working on its `expiresAt` date: create its replacement,
-deploy it, then revoke the old one.
+`validityDays` stops working on its `expiresAt` date. From 0.5.0, replace it
+with `agentCredentials.rotate(id, { overlapHours }, { idempotencyKey })`: the
+old secret keeps working for `overlapHours` (default 24), so deploy the new
+token within that window. A key rotating itself must pass `overlapHours` of at
+least 1. On an older server, create a replacement, deploy it, then revoke the
+old one.
 
 `agentCredentials.list()` returns bounded metadata only. Revoke immediately with
 `agentCredentials.revoke(id)`. A repeated exact create request returns the
@@ -356,8 +360,9 @@ secret. After an uncertain response, inspect the list and repeat only the exact
 approved request with the same idempotency key. Never create a different
 credential as an automatic retry.
 
-Agent credentials cannot delegate credential administration, member changes,
-customer lifecycle, or erasure. These SDK methods are available in 0.2.0 and
+Agent credentials cannot delegate credential administration or member
+changes. Customer lifecycle and erasure scopes are available only on a key
+bound to one tenant with `tenantId` (0.5.0+). These SDK methods are available in 0.2.0 and
 later and require a server with `capabilities.agentCredentials.enabled`.
 Server enablement remains deployment-controlled.
 
