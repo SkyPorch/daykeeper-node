@@ -1,6 +1,19 @@
 # Changelog
 
-## 0.5.0 (unreleased)
+## 0.5.0
+
+### Breaking
+
+- `CreateAgentCredentialInput` is a discriminated union. A key with `tenantId`
+  may carry only `daykeeper.customer-sessions:write`, `daykeeper.lifecycle:write`
+  and `daykeeper.customers:delete`; a key without it may not carry the last
+  two. Code that passes `tenantId` with any other scope no longer compiles.
+  `AgentCredentialScope` now includes the two tenant-only scopes, so a `scopes`
+  variable typed `AgentCredentialScope[]` no longer compiles either. Type it as
+  `OrganizationAgentCredentialScope[]` or `TenantAgentCredentialScope[]`.
+  Nothing changes at runtime.
+
+### Added
 
 - Add `agentCredentials.rotate(credentialId, { overlapHours?, validityDays? },
 { idempotencyKey })`. It replaces a key's secret and keeps its name, scopes
@@ -28,7 +41,7 @@
   key takes `OrganizationAgentCredentialScope`s, and a key with `tenantId`
   takes `TenantAgentCredentialScope`s (customer sessions, lifecycle, customer
   deletion). A lifecycle or erasure scope without `tenantId`, or an account
-  scope with it, is now a type error, not a server rejection.
+  scope with it, is now a type error as well as a server rejection.
 - `AgentCredential.tenantId` is optional, because servers before tenant-scoped
   keys omit it. Treat absent as organization-wide. Agent credential response
   types accept fields a later contract minor version adds.
