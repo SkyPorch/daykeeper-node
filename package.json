@@ -48,7 +48,7 @@
   "bugs": {
     "url": "https://github.com/SkyPorch/daykeeper-node/issues"
   },
-  "homepage": "https://github.com/SkyPorch/daykeeper-node#readme",
+  "homepage": "https://www.mydaykeeper.com",
   "license": "Apache-2.0",
   "devDependencies": {
     "@types/node": "22.20.1",
