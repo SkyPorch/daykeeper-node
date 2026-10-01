@@ -1,6 +1,14 @@
 # Changelog
 
-## 0.5.0 (unreleased)
+## 0.5.0
+
+### Breaking
+
+- `CreateAgentCredentialInput` is a discriminated union. TypeScript code that
+  passes a lifecycle or erasure scope without `tenantId`, or an account scope
+  with it, no longer compiles. The server already rejected those requests.
+
+### Added
 
 - Add `agentCredentials.rotate(credentialId, { overlapHours?, validityDays? },
 { idempotencyKey })`. It replaces a key's secret and keeps its name, scopes
