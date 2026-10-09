@@ -130,6 +130,11 @@ export type CustomerSessionPurpose =
   Schemas["CreateCustomerSessionInput"]["purpose"];
 export type CreateCustomerSessionInput = Schemas["CreateCustomerSessionInput"];
 export type CustomerSession = Schemas["CustomerSession"];
+export type Profile = Schemas["Profile"];
+export type Workspace = Schemas["Workspace"];
+export type WorkspaceList = Schemas["WorkspaceList"];
+export type CustomerEmail = Schemas["CustomerEmail"];
+export type CustomerEmailInput = Schemas["CustomerEmailInput"];
 
 export type ApiInboxActivationReceipt = Schemas["ApiInboxActivation"];
 export type ApiInboxActivationState = ApiInboxActivationReceipt["state"];
@@ -143,6 +148,15 @@ export interface OperatorConversation {
   lastActivityAt?: string;
 }
 
+export type OperatorConversationStatus = Schemas["OperatorConversationStatus"];
+export type OperatorConversationStatusInput =
+  Schemas["OperatorConversationStatusInput"];
+export type OperatorConversationStatusResult =
+  Schemas["OperatorConversationStatusResult"];
+export type OperatorConversationPage = Schemas["OperatorConversationPage"];
+export type OperatorConversationMessagesPage =
+  Schemas["OperatorConversationMessagesPage"];
+
 export interface OperatorMessage {
   id: number;
   conversationId: number;
@@ -155,12 +169,20 @@ export interface OperatorMessage {
 export interface OperatorConversationList {
   tenantId: string;
   conversations: readonly OperatorConversation[];
+  page: OperatorConversationPage;
+}
+
+export interface OperatorConversationDetail {
+  tenantId: string;
+  conversationId: number;
+  conversation: OperatorConversation;
 }
 
 export interface OperatorConversationMessages {
   tenantId: string;
   conversationId: number;
   messages: readonly OperatorMessage[];
+  page: OperatorConversationMessagesPage;
 }
 
 export interface OperatorConversationReply {

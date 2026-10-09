@@ -127,11 +127,14 @@ remain separate operator-controlled gates.
 
 Management clients with the conversation scopes can read tenant conversations
 and send plain-text replies through `operatorConversations`. Conversation IDs
-are positive provider display IDs. A reply is sent once; if its outcome is
-unknown, inspect the error before deciding whether to repeat the same call.
+are positive provider display IDs. Reads accept opaque cursors and bounded page
+sizes; message reads begin with the latest page in chronological order. A
+reply may include a stable UUID `requestId`; reuse it with the same conversation
+and body to retrieve the original result after an uncertain outcome.
 
 ```ts
 const conversations = await daykeeper.operatorConversations.list(tenantId);
+const conversation = await daykeeper.operatorConversations.get(tenantId, 42);
 const history = await daykeeper.operatorConversations.messages(
   tenantId,
   conversations.conversations[0].id,
@@ -140,8 +143,28 @@ const sent = await daykeeper.operatorConversations.reply(
   tenantId,
   history.conversationId,
   "Thanks — we are looking into this now.",
+  { requestId: crypto.randomUUID() },
+);
+await daykeeper.operatorConversations.setStatus(
+  tenantId,
+  history.conversationId,
+  {
+    status: "resolved",
+  },
 );
 ```
+
+Use the same `requestId` if you retry a reply whose outcome is unknown. Generate
+it once per logical reply, not once per network attempt. For older clients, the
+fourth reply argument remains optional and replies without it retain the
+existing behavior.
+
+OAuth clients can read the current person's identity and workspace using
+`daykeeper.profile.get()` and `daykeeper.workspaces.list()`. These methods do
+not accept a workspace ID: the access token determines the active workspace.
+Use the host's reconnect flow to switch. Human-owner clients can read and update
+customer email preferences with `daykeeper.customerEmail.get(tenantId)` and
+`daykeeper.customerEmail.set(tenantId, { enabled })`.
 
 ```ts
 import { DaykeeperClient } from "@skyporch/daykeeper";

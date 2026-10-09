@@ -4,6 +4,50 @@
  */
 
 export interface paths {
+    "/v1/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the authenticated person's profile and connected workspace
+         * @description Requires daykeeper.accounts:read. Returns only the person and
+         *     workspace bound to the access token. The caller cannot select or
+         *     change the active workspace through this endpoint.
+         */
+        get: operations["getProfile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/workspaces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List workspaces available to the authenticated person
+         * @description Requires daykeeper.accounts:read. The current workspace remains the
+         *     one bound to the access token. This list cannot be used to change it;
+         *     reconnect through the host to use another workspace.
+         */
+        get: operations["listWorkspaces"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/capabilities": {
         parameters: {
             query?: never;
@@ -446,6 +490,100 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/tenants/{tenantId}/web-client": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Inspect the tenant's web messenger settings
+         * @description Returns the websites allowed to open the tenant's web messenger, the
+         *     publishable key the messenger boots with, and the install snippet.
+         *     Requires daykeeper.accounts:read. A tenant-bound credential can read
+         *     only its own tenant.
+         *
+         *     An unknown tenant, another organization's tenant, and a tenant that has
+         *     never had a web client all answer RESOURCE_NOT_FOUND (404), so the
+         *     response does not disclose which. `ETag` carries the current `version`;
+         *     send it back as `If-Match` on the next PUT.
+         */
+        get: operations["getWebClient"];
+        /**
+         * Create or replace the tenant's web messenger settings
+         * @description Requires daykeeper.accounts:write. A tenant-bound credential can write
+         *     only its own tenant. The tenant must have an API inbox that is not
+         *     being deleted.
+         *
+         *     The body replaces the whole setting: an omitted `greeting` or
+         *     `accentColor` is cleared, not kept. The first successful PUT for a
+         *     tenant mints its publishable key and answers 201; later PUTs answer
+         *     200 and keep the key (use the rotate operation to change it). A PUT
+         *     that changes nothing leaves `version` as it was.
+         *
+         *     Concurrency. Without a precondition the PUT is unconditional: it
+         *     creates the web client if there is none and otherwise replaces it,
+         *     whoever wrote it last. A writer that may race another must send one of:
+         *     - `If-Match: <version>` (the `ETag` from the last read or write) to
+         *       replace only that version. A different stored version, or no web
+         *       client at all, answers VERSION_CONFLICT (412).
+         *     - `If-None-Match: *` to create only. If a web client already exists
+         *       the request answers VERSION_CONFLICT (412) and nothing changes; read
+         *       it and retry with `If-Match`.
+         *
+         *     Sending both headers, an `If-None-Match` other than `*`, or a
+         *     malformed `If-Match` is rejected with INVALID_INPUT (400).
+         *     `If-None-Match: *` is new in contract 1.7.0; a server that predates it
+         *     ignores the header, so check that the response status is 201 before
+         *     relying on it having created the web client.
+         *
+         *     Origins are normalized (lowercase host, default port and trailing
+         *     slash removed), checked for duplicates after normalization, and
+         *     returned sorted.
+         */
+        put: operations["putWebClient"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tenants/{tenantId}/web-client/publishable-key:rotate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Replace the web messenger's publishable key
+         * @description Requires daykeeper.accounts:write. Mints a new publishable key and
+         *     increments `version`. The previous key keeps working for
+         *     `graceSeconds` (at most 604800, seven days) and its end is reported as
+         *     `previousKeyExpiresAt`; `graceSeconds: 0` stops it at once. Only one
+         *     previous key is kept: rotating again during a grace period stops the
+         *     older previous key at once.
+         *
+         *     The key is a public identifier, not a secret: what keeps other
+         *     websites out is the Origin check against `allowedOrigins`. This
+         *     operation takes no precondition header and is not idempotent: each
+         *     call mints a new key.
+         */
+        post: operations["rotateWebClientPublishableKey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/tenants/{tenantId}/domain-verifications": {
         parameters: {
             query?: never;
@@ -731,8 +869,9 @@ export interface paths {
          * List support conversations for one tenant
          * @description Requires daykeeper.conversations:read. The tenant is selected only by
          *     the authenticated principal and path; provider credentials and
-         *     provider-internal identifiers are never returned. Results are bounded
-         *     to 100 conversations. This is a read-only operation.
+         *     provider-internal identifiers are never returned. Results are paginated
+         *     with at most 100 conversations per page. A cursor continues the current
+         *     tenant's list. This is a read-only operation.
          */
         get: operations["listOperatorConversations"];
         put?: never;
@@ -741,6 +880,33 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/v1/tenants/{tenantId}/conversations/{conversationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        /**
+         * Read one support conversation
+         * @description Requires daykeeper.conversations:read and returns one tenant-bound conversation summary.
+         */
+        get: operations["getOperatorConversation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Set a support conversation's open or resolved status
+         * @description Requires daykeeper.conversations:write. Only the status may be changed.
+         */
+        patch: operations["setOperatorConversationStatus"];
         trace?: never;
     };
     "/v1/tenants/{tenantId}/conversations/{conversationId}/messages": {
@@ -755,7 +921,10 @@ export interface paths {
         };
         /**
          * Read messages for one support conversation
-         * @description Requires daykeeper.conversations:read. Messages are bounded to 200 and provider internals are omitted.
+         * @description Requires daykeeper.conversations:read. The first page contains the
+         *     latest messages, sorted oldest to newest. Pass `cursor` from the page
+         *     to read older messages. Each page is bounded to 200 and provider
+         *     internals are omitted.
          */
         get: operations["listOperatorConversationMessages"];
         put?: never;
@@ -763,11 +932,38 @@ export interface paths {
          * Send one plain-text support reply
          * @description Requires daykeeper.conversations:write. The server dispatches the
          *     provider write once and does not automatically retry it. If the
-         *     response is lost, the caller must inspect the conversation before
-         *     deciding whether to repeat the request. Content is trimmed and limited
-         *     to 4,000 characters.
+         *     response is lost, repeat the exact request with the same
+         *     Idempotency-Key to receive its original result without sending a
+         *     duplicate reply. The header is optional for compatibility with older
+         *     callers. Content is trimmed and limited to 4,000 characters.
          */
         post: operations["sendOperatorConversationReply"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tenants/{tenantId}/customer-email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read customer email settings
+         * @description Requires a human-owner credential with daykeeper.accounts:read.
+         */
+        get: operations["getCustomerEmail"];
+        put?: never;
+        /**
+         * Update customer email settings
+         * @description Requires a human-owner credential with daykeeper.accounts:write.
+         */
+        post: operations["setCustomerEmail"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1109,6 +1305,84 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        Profile: {
+            /** Format: uuid */
+            userId: string;
+            name: string;
+            /** Format: email */
+            email: string;
+            /** Format: uuid */
+            organizationId: string;
+            workspace: {
+                /** Format: uuid */
+                organizationId: string;
+                organizationSlug: string;
+                name: string;
+            } & {
+                [key: string]: unknown;
+            };
+        } & {
+            [key: string]: unknown;
+        };
+        Workspace: {
+            /** Format: uuid */
+            organizationId: string;
+            organizationSlug: string;
+            name: string;
+            role: string;
+        } & {
+            [key: string]: unknown;
+        };
+        WorkspaceList: {
+            items: components["schemas"]["Workspace"][];
+        } & {
+            [key: string]: unknown;
+        };
+        CustomerEmail: {
+            /** Format: uuid */
+            tenantId: string;
+            enabled: boolean;
+            customSender: string | null;
+            senderName: string | null;
+            sendingDomain: string | null;
+            deliveryEnabled: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        CustomerEmailInput: {
+            enabled: boolean;
+        };
+        OperatorConversationPage: {
+            limit: number;
+            nextCursor: string | null;
+            hasMore: boolean;
+        };
+        OperatorConversationMessagesPage: {
+            limit: number;
+            nextCursor: string | null;
+            hasMore: boolean;
+        };
+        /** @enum {string} */
+        OperatorConversationStatus: "open" | "resolved";
+        OperatorConversationStatusInput: {
+            status: components["schemas"]["OperatorConversationStatus"];
+        };
+        OperatorConversationStatusResult: {
+            /** Format: uuid */
+            tenantId: string;
+            /** Format: int64 */
+            conversationId: number;
+            conversation: components["schemas"]["OperatorConversation"];
+        } & {
+            [key: string]: unknown;
+        };
+        OperatorConversationDetail: {
+            /** Format: uuid */
+            tenantId: string;
+            /** Format: int64 */
+            conversationId: number;
+            conversation: components["schemas"]["OperatorConversation"];
+        };
         OperatorConversation: {
             /** Format: int64 */
             id: number;
@@ -1138,6 +1412,9 @@ export interface components {
             /** Format: uuid */
             tenantId: string;
             conversations: components["schemas"]["OperatorConversation"][];
+            page: components["schemas"]["OperatorConversationPage"];
+        } & {
+            [key: string]: unknown;
         };
         OperatorConversationMessages: {
             /** Format: uuid */
@@ -1145,6 +1422,9 @@ export interface components {
             /** Format: int64 */
             conversationId: number;
             messages: components["schemas"]["OperatorMessage"][];
+            page: components["schemas"]["OperatorConversationMessagesPage"];
+        } & {
+            [key: string]: unknown;
         };
         OperatorConversationReply: {
             /** Format: uuid */
@@ -1210,6 +1490,19 @@ export interface components {
              *     discovery does not grant machine-owner authority or account scopes.
              */
             workspaceClaims?: boolean;
+            /**
+             * @description Optional on older servers; absent means the server predates web
+             *     clients. `enabled: false` means the web-client routes answer
+             *     FEATURE_UNAVAILABLE (409). Open to fields added in later minor
+             *     versions.
+             */
+            webClients?: {
+                enabled: boolean;
+                /** @description True when `http://localhost`, `http://127.0.0.1` and `http://[::1]` origins are accepted, for local development. */
+                loopbackOrigins: boolean;
+            } & {
+                [key: string]: unknown;
+            };
             flows: {
                 /** @constant */
                 schemaVersion: "2026-08-01";
@@ -2145,6 +2438,80 @@ export interface components {
         RotateAgentCredentialResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["RotateAgentCredentialResult"];
         };
+        WebClientResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["WebClient"];
+        };
+        /**
+         * @description A tenant's web messenger settings: the websites allowed to open its
+         *     API inbox's web messenger, and the publishable key the messenger boots
+         *     with.
+         */
+        WebClient: {
+            /** Format: uuid */
+            tenantId: string;
+            /** @enum {string} */
+            state: "enabled" | "disabled";
+            /** @description Exact, normalized origins, sorted. */
+            allowedOrigins: string[];
+            /**
+             * @description A public identifier, not a secret: it is embedded in the website's
+             *     HTML. What stops another website from using it is the Origin check
+             *     against `allowedOrigins`, made at the visitor-session exchange and at
+             *     the gateway.
+             */
+            publishableKey: string;
+            /**
+             * Format: date-time
+             * @description While a rotated-out key still works, when it stops. Null when there is none or it has expired.
+             */
+            previousKeyExpiresAt: string | null;
+            /** @description The messenger's opening line, or null for the default. */
+            greeting: string | null;
+            /** @description Lowercase `#rrggbb`, or null for the default. */
+            accentColor: string | null;
+            /** @description True when `state` is enabled and the tenant's API inbox is live for customer traffic. */
+            trafficEnabled: boolean;
+            /**
+             * @description The HTML install snippet: it loads
+             *     https://cdn.mydaykeeper.com/messenger/v1/messenger.js and boots the
+             *     messenger with `publishableKey`. Paste it into every page of an
+             *     allowed website.
+             */
+            snippet: string;
+            /** @description Increments on every change, including key rotation. Sent as `ETag`. */
+            version: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** @description The whole web messenger setting. Omitted optional fields are cleared. */
+        WebClientInput: {
+            /**
+             * @description Disabled keeps the settings and key but turns the messenger off.
+             * @enum {string}
+             */
+            state: "enabled" | "disabled";
+            /**
+             * @description One to ten distinct exact origins, `https://host[:port]`, with no
+             *     path, query, fragment, credentials or wildcard (a trailing `/` is
+             *     accepted and removed). `http://localhost`, `http://127.0.0.1` and
+             *     `http://[::1]` (any port) are accepted only where
+             *     `capabilities.webClients.loopbackOrigins` is true. Origins that
+             *     are equal after normalization are duplicates and rejected.
+             */
+            allowedOrigins: string[];
+            /**
+             * @description 1 to 280 characters after trimming, with no control characters.
+             *     Send it already trimmed. A greeting that is empty after trimming is
+             *     rejected; omit the field to clear it.
+             */
+            greeting?: string;
+            /** @description A `#rrggbb` hex color, stored lowercase. */
+            accentColor?: string;
+        };
+        RotateWebClientPublishableKeyInput: {
+            /** @description How long the previous key keeps working. 0 stops it at once; at most 604800 (seven days). */
+            graceSeconds: number;
+        };
         WorkspaceClaimResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["WorkspaceClaim"];
         };
@@ -2212,6 +2579,21 @@ export interface components {
         };
         FlowVersionResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["FlowVersion"];
+        };
+        ProfileResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["Profile"];
+        };
+        WorkspaceListResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["WorkspaceList"];
+        };
+        CustomerEmailResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["CustomerEmail"];
+        };
+        OperatorConversationStatusResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["OperatorConversationStatusResult"];
+        };
+        OperatorConversationDetailResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["OperatorConversationDetail"];
         };
         OperatorConversationListResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["OperatorConversationList"];
@@ -2371,6 +2753,22 @@ export interface components {
         FlowId: string;
         FlowVersionNumber: number;
         AgentCredentialId: string;
+        /**
+         * @description Replace only this version of the web client: the `version` (as sent in
+         *     `ETag`) from the last read or write. `3`, `"3"` and `W/"3"` are
+         *     accepted. A different stored version, or no web client at all, answers
+         *     VERSION_CONFLICT (412). A malformed value, including `*` or a list of
+         *     versions, answers INVALID_INPUT (400). Do not combine with
+         *     If-None-Match.
+         */
+        WebClientIfMatch: string;
+        /**
+         * @description `*` creates the web client only if the tenant has none. If one exists
+         *     the request answers VERSION_CONFLICT (412) and nothing changes. Any
+         *     other value answers INVALID_INPUT (400). Do not combine with If-Match.
+         *     New in contract 1.7.0; older servers ignore this header.
+         */
+        WebClientIfNoneMatch: "*";
         DomainVerificationId: string;
         WorkspaceClaimId: string;
     };
@@ -2383,11 +2781,61 @@ export interface components {
          *     callers, for a key that lasts until revoked, and on older servers.
          */
         DaykeeperCredentialExpiresAt: string;
+        /** @description The web client's `version` as a quoted strong entity tag, for example `"3"`. Send it back as If-Match. */
+        WebClientETag: string;
     };
     pathItems: never;
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The authenticated person's profile. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listWorkspaces: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Workspaces available to the authenticated person. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceListResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
     getCapabilities: {
         parameters: {
             query?: never;
@@ -2985,6 +3433,150 @@ export interface operations {
             default: components["responses"]["Error"];
         };
     };
+    getWebClient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The tenant's web client. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["WebClientETag"];
+                    "Cache-Control"?: "no-store";
+                    "Daykeeper-Credential-Expires-At": components["headers"]["DaykeeperCredentialExpiresAt"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebClientResponse"];
+                };
+            };
+            /** @description The tenant id is not a UUID (INVALID_INPUT). */
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            /** @description The credential lacks daykeeper.accounts:read (SCOPE_REQUIRED). */
+            403: components["responses"]["Error"];
+            /** @description No such tenant in the caller's organization, or the tenant has no web client (RESOURCE_NOT_FOUND). */
+            404: components["responses"]["Error"];
+            /** @description Web clients are not enabled on this deployment (FEATURE_UNAVAILABLE). */
+            409: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    putWebClient: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Replace only this version of the web client: the `version` (as sent in
+                 *     `ETag`) from the last read or write. `3`, `"3"` and `W/"3"` are
+                 *     accepted. A different stored version, or no web client at all, answers
+                 *     VERSION_CONFLICT (412). A malformed value, including `*` or a list of
+                 *     versions, answers INVALID_INPUT (400). Do not combine with
+                 *     If-None-Match.
+                 */
+                "If-Match"?: components["parameters"]["WebClientIfMatch"];
+                /**
+                 * @description `*` creates the web client only if the tenant has none. If one exists
+                 *     the request answers VERSION_CONFLICT (412) and nothing changes. Any
+                 *     other value answers INVALID_INPUT (400). Do not combine with If-Match.
+                 *     New in contract 1.7.0; older servers ignore this header.
+                 */
+                "If-None-Match"?: components["parameters"]["WebClientIfNoneMatch"];
+            };
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WebClientInput"];
+            };
+        };
+        responses: {
+            /** @description The existing web client was replaced (or was already equal); its publishable key is unchanged. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["WebClientETag"];
+                    "Cache-Control"?: "no-store";
+                    "Daykeeper-Credential-Expires-At": components["headers"]["DaykeeperCredentialExpiresAt"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebClientResponse"];
+                };
+            };
+            /** @description The web client was created and its publishable key minted. */
+            201: {
+                headers: {
+                    ETag: components["headers"]["WebClientETag"];
+                    "Cache-Control"?: "no-store";
+                    "Daykeeper-Credential-Expires-At": components["headers"]["DaykeeperCredentialExpiresAt"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebClientResponse"];
+                };
+            };
+            /** @description The body, an origin, the greeting or the accent color is invalid, or the If-Match / If-None-Match headers are malformed or sent together (INVALID_INPUT). */
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            /** @description The credential lacks daykeeper.accounts:write (SCOPE_REQUIRED). */
+            403: components["responses"]["Error"];
+            /** @description No such tenant in the caller's organization (RESOURCE_NOT_FOUND). */
+            404: components["responses"]["Error"];
+            /** @description The tenant has no API inbox or is being deleted (RESOURCE_STATE_CONFLICT), or web clients are not enabled on this deployment (FEATURE_UNAVAILABLE). */
+            409: components["responses"]["Error"];
+            /** @description The If-Match version is not the stored one, If-Match was sent and no web client exists, or If-None-Match is `*` and a web client exists (VERSION_CONFLICT). Nothing was written. */
+            412: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    rotateWebClientPublishableKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RotateWebClientPublishableKeyInput"];
+            };
+        };
+        responses: {
+            /** @description The web client with its new publishable key. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["WebClientETag"];
+                    "Cache-Control"?: "no-store";
+                    "Daykeeper-Credential-Expires-At": components["headers"]["DaykeeperCredentialExpiresAt"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebClientResponse"];
+                };
+            };
+            /** @description The body is invalid (INVALID_INPUT). */
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            /** @description The credential lacks daykeeper.accounts:write (SCOPE_REQUIRED). */
+            403: components["responses"]["Error"];
+            /** @description No such tenant in the caller's organization, or the tenant has no web client (RESOURCE_NOT_FOUND). */
+            404: components["responses"]["Error"];
+            /** @description The tenant is being deleted (RESOURCE_STATE_CONFLICT), or web clients are not enabled on this deployment (FEATURE_UNAVAILABLE). */
+            409: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
     createDomainVerification: {
         parameters: {
             query?: never;
@@ -3406,7 +3998,10 @@ export interface operations {
     };
     listOperatorConversations: {
         parameters: {
-            query?: never;
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
             header?: never;
             path: {
                 tenantId: components["parameters"]["TenantId"];
@@ -3430,9 +4025,71 @@ export interface operations {
             default: components["responses"]["Error"];
         };
     };
-    listOperatorConversationMessages: {
+    getOperatorConversation: {
         parameters: {
             query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The requested conversation. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorConversationDetailResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    setOperatorConversationStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OperatorConversationStatusInput"];
+            };
+        };
+        responses: {
+            /** @description The conversation status was updated. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorConversationStatusResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listOperatorConversationMessages: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
             header?: never;
             path: {
                 tenantId: components["parameters"]["TenantId"];
@@ -3461,7 +4118,10 @@ export interface operations {
     sendOperatorConversationReply: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description UUID for one reply attempt. Reuse it only with the exact same conversation and body. */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 tenantId: components["parameters"]["TenantId"];
                 conversationId: number;
@@ -3474,6 +4134,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The reply result returned for an exact replay. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorConversationReplyResponse"];
+                };
+            };
             /** @description Reply accepted by the provider. */
             201: {
                 headers: {
@@ -3482,6 +4151,63 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OperatorConversationReplyResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getCustomerEmail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Customer email settings. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerEmailResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    setCustomerEmail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustomerEmailInput"];
+            };
+        };
+        responses: {
+            /** @description Updated customer email settings. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerEmailResponse"];
                 };
             };
             400: components["responses"]["Error"];

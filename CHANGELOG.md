@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.6.0 - Unreleased
+
+### Added
+
+- Add `operatorConversations.get(tenantId, conversationId)` for direct reads.
+- Add `profile.get()` and `workspaces.list()` for the identity and workspace
+  bound to the supplied access token. Neither method accepts a workspace
+  selector.
+- Add `customerEmail.get(tenantId)` and
+  `customerEmail.set(tenantId, { enabled })` for human-owner customer email
+  settings.
+- Add `operatorConversations.setStatus(tenantId, conversationId, { status })`
+  with the `open` and `resolved` states.
+- Add `cursor` and `limit` options to conversation and message reads. Messages
+  return page metadata and begin with the latest items in chronological order.
+- Add optional `requestId` to `operatorConversations.reply`. The SDK sends it
+  as `Idempotency-Key`, allowing a caller to repeat an uncertain reply with the
+  same UUID and receive its stored result. Omitting it preserves legacy behavior.
+- Update the generated schema to management contract 1.8.0.
+
 ## 0.5.0
 
 ### Breaking

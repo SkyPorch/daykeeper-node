@@ -1,14 +1,15 @@
 # Contract source
 
-`daykeeper.yaml` is an exact, byte-for-byte copy of `openapi/daykeeper.yaml`
-from `SkyPorch/daykeeper-openapi` tag `v1.6.0`, commit
-`f563df6fffca80d7d2c634e270604b6e61561152` (contract `1.6.0`, the squash merge
-of `daykeeper-openapi` PR #34).
+`daykeeper.yaml` is kept byte-for-byte aligned with the canonical
+`artifacts/daykeeper-dashboard/openapi/openapi/daykeeper.yaml` in this
+workspace. It is a draft of management contract `1.8.0`; do not cite an
+upstream tag or commit until that canonical change has been released.
 
-- SHA-256: `0e3c3b6d3d524366169c829164c85caa67b86445eea07e5b4d0979c0e230ff69`
-- Git blob: `e8bfa74803c11bbab03889523dbd261f386271c6`
-
-There is no local delta. This repository does not modify the vendored contract.
+The 1.8.0 additions cover authenticated-person profile and workspace reads,
+customer email preferences, conversation status changes, cursor pagination for
+conversation and message lists, direct conversation reads, and optional reply idempotency keys. The
+response types preserve existing fields while adding page metadata. The Node
+SDK generated schema is produced from this copied file with `pnpm generate`.
 
 `1.6.0` adds agent credential rotation: `POST
 /v1/agent-credentials/{agentCredentialId}/rotate` with a required
@@ -150,5 +151,5 @@ are required for activation. The new SDK methods need the corresponding reviewed
 server version; older servers remain compatible with existing account-only
 methods.
 
-The source above is the immutable `v1.6.0` tag, which satisfies `RELEASING.md`
-step 2 for 0.5.0.
+The baseline sections above describe previously released sources. This 1.8.0
+snapshot remains a local draft until the canonical contract is released.

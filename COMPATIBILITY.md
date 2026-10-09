@@ -9,6 +9,7 @@ a release.
 
 | SDK version | Management contract | Contract tag | Contract commit                            | Notes                                                                                                                                                        |
 | ----------- | ------------------- | ------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0.6.0       | 1.8.0 (draft)       | pending      | pending                                    | Adds profile/workspace reads, customer email settings, direct conversation reads, status updates, pagination, and reply idempotency. Not released.           |
 | 0.5.0       | 1.6.0               | `v1.6.0`     | `f563df6fffca80d7d2c634e270604b6e61561152` | Adds `agentCredentials.rotate` (needs server migration 0105) and tenant-bound key scopes; `CreateAgentCredentialInput` is stricter.                          |
 | 0.4.0       | 1.4.0               | `v1.4.0`     | `488cc39c3604882742c88b08d90a664e3d82e515` | Agent credentials last until revoked by default; `expiresAt` is nullable.                                                                                    |
 | 0.3.0       | 1.3.0               | `v1.3.0`     | `067465edfc6c94e63867a6dd0d9db02e12683877` | Published by hand with no provenance attestation. Adds machine-owner workspace claims.                                                                       |
@@ -18,6 +19,12 @@ a release.
 | 0.1.0       | 0.1.0               | `v1.0.0`     | `35f5bd45fe0c6a6901766543bff90dae6838b965` | Published by hand with no provenance attestation.                                                                                                            |
 
 ## Server requirement
+
+The 0.6.0 draft requires the 1.8.0 profile/workspace, customer-email,
+conversation pagination and status routes. The server must accept optional
+UUID idempotency keys on operator replies and return page metadata on list
+responses. Until the matching API release is available, keep these methods
+behind deployment capability checks.
 
 The 0.5.0 `agentCredentials.rotate` method requires a server with agent
 credential rotation (`SkyPorch/daykeeper` migration 0105); check
