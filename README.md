@@ -130,7 +130,8 @@ and send plain-text replies through `operatorConversations`. Conversation IDs
 are positive provider display IDs. Reads accept an opaque `cursor` and a
 `limit` from 1 through 100 and return `page.nextCursor` (null on the last
 page); message reads begin with the latest page in chronological order.
-Servers before contract 1.9.0 omit `page`. A reply is sent once; if its outcome
+Pagination is opt-in: `page` is returned only when you pass `limit` or
+`cursor`, and servers before contract 1.9.0 never return it. A reply is sent once; if its outcome
 is unknown, inspect the error before deciding whether to repeat the call. A
 reply may include a stable UUID `requestId`; reuse it with the same
 conversation and body to retrieve the original result after an uncertain

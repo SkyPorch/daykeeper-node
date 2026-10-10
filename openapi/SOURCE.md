@@ -3,14 +3,14 @@
 **Branch pin, not releasable.** `daykeeper.yaml` is an exact, byte-for-byte
 copy of `openapi/daykeeper.yaml` from the head of `SkyPorch/daykeeper-openapi`
 PR #42 (branch `codex/daykeeper-dashboard`), commit
-`95f1f4c1cf94eb7bac3461d8fb3389b88d1265a6`, contract `1.9.0`. That contract is
+`9886648629cd14d01a7b3aaef498fd9221473025`, contract `1.9.0`. That contract is
 not merged or tagged yet. **Before an SDK release:** merge openapi#42, tag
 `v1.9.0`, re-vendor from the tag, record the tag and its commit here and in
 `COMPATIBILITY.md`, and re-run `pnpm check` (the checksums below are verified by
 `test/contractSource.test.mjs`).
 
-- SHA-256: `2b4825d85a7c488183b8403d18e1da0d17aa01d0145f4415020e3dff7d52b694`
-- Git blob: `720c0e8224c25f6011d43f09c16c5efdae9c0857`
+- SHA-256: `ac0da6e342dc564a58a6a97eff0f4437d4b4d8bf0b6891b7ad4e0f500afa95db`
+- Git blob: `1792731b99e360e55dd965afa629403cac73b8df`
 
 There is no local delta. This repository does not modify the vendored contract.
 
@@ -19,11 +19,16 @@ and `GET /v1/workspaces` (human OAuth, `daykeeper.accounts:read`); `GET` and
 `PATCH /v1/tenants/{tenantId}/conversations/{conversationId}` (read one
 conversation, set `open`/`resolved`); optional `limit` (1-100, default 50) and
 `cursor` (at most 256 characters) on the conversation and message lists, with
-an optional `page: { limit, nextCursor, hasMore }` that servers before 1.9.0
-omit; an optional UUID `Idempotency-Key` on operator replies (exact replay
+opt-in pagination: `page: { limit, nextCursor, hasMore }` is present only when
+the request sends `limit` or `cursor`, and a request with neither keeps the
+1.8 representation; an optional UUID `Idempotency-Key` on operator replies (exact replay
 answers `200`, a reused key `409`); `GET`/`POST
 /v1/tenants/{tenantId}/customer-email`; and optional capability flags
-`operatorConversations`, `customerEmail` and `dashboardIdentity`. It also
+`operatorConversations` (`statusUpdates` covers both GET and PATCH on one
+conversation), `customerEmail` and `dashboardIdentity`; and a human
+`authorizationCode` OAuth flow beside client credentials. Relative to the
+previous branch pin (`95f1f4c`), only descriptions, the OAuth flow and the
+opt-in pagination rule changed; the generated types differ only in comments. It also
 carries the already-tagged `1.7.0` (web clients) and `1.8.0` (optional
 `emailed` on workspace claim results) changes, which this SDK does not wrap.
 

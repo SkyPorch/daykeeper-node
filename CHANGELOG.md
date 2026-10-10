@@ -3,6 +3,7 @@
 ## 0.6.0 - Unreleased
 
 Vendors contract `1.9.0` from the head of `SkyPorch/daykeeper-openapi` PR #42
+(`9886648`)
 (a branch pin; see `openapi/SOURCE.md`). Re-pin to tag `v1.9.0` before release.
 
 ### Added
@@ -17,8 +18,9 @@ Vendors contract `1.9.0` from the head of `SkyPorch/daykeeper-openapi` PR #42
   `open` and `resolved`.
 - `cursor` and `limit` options on `operatorConversations.list` and
   `operatorConversations.messages` (limit 1-100, cursor at most 256
-  characters, validated before any request). Results carry an optional `page`
-  (`limit`, `nextCursor`, `hasMore`), absent on servers before contract 1.9.0.
+  characters, validated before any request). Pagination is opt-in: a result
+  carries `page` (`limit`, `nextCursor`, `hasMore`) only when `limit` or
+  `cursor` was passed; servers before contract 1.9.0 never send it.
   Message pages begin with the latest messages in chronological order. Calls
   without these options send no query string, as before.
 - Optional `requestId` (UUID v4) on `operatorConversations.reply`, sent as
