@@ -90,7 +90,7 @@ const ALLOWED_PATHS: readonly RegExp[] = [
   `/v1/tenants/${SEGMENT}/inbox-activations/${SEGMENT}`,
   `/v1/tenants/${SEGMENT}/inbox-activations/${SEGMENT}/revoke`,
   `/v1/tenants/${SEGMENT}/conversations`,
-  `/v1/tenants/${SEGMENT}/conversations/${SEGMENT}`,
+  `/v1/tenants/${SEGMENT}/conversations/[1-9][0-9]*`,
   `/v1/tenants/${SEGMENT}/conversations/[1-9][0-9]*/messages`,
   `/v1/tenants/${SEGMENT}/customer-email`,
   `/v1/tenants/${SEGMENT}/flows`,
@@ -552,12 +552,14 @@ export class DaykeeperClient {
           },
         ),
     };
+    // Async so an invalid argument rejects the returned promise instead of
+    // throwing synchronously.
     this.customerEmail = {
-      get: (tenantId, requestOptions = {}) =>
+      get: async (tenantId, requestOptions = {}) =>
         this.#request(`/v1/tenants/${pathSegment(tenantId)}/customer-email`, {
           signal: requestOptions.signal,
         }),
-      set: (tenantId, input, requestOptions = {}) =>
+      set: async (tenantId, input, requestOptions = {}) =>
         this.#request(`/v1/tenants/${pathSegment(tenantId)}/customer-email`, {
           method: "POST",
           body: validateCustomerEmailInput(input),
@@ -616,12 +618,12 @@ export class DaykeeperClient {
         ),
     };
     this.operatorConversations = {
-      list: (tenantId, requestOptions = {}) =>
+      list: async (tenantId, requestOptions = {}) =>
         this.#request(`/v1/tenants/${pathSegment(tenantId)}/conversations`, {
           signal: requestOptions.signal,
-          query: pageQuery(requestOptions, 100),
+          query: pageQuery(requestOptions),
         }),
-      get: (tenantId, conversationId, requestOptions = {}) =>
+      get: async (tenantId, conversationId, requestOptions = {}) =>
         this.#request(
           `/v1/tenants/${pathSegment(tenantId)}/conversations/${positiveSafeInteger(conversationId)}`,
           { signal: requestOptions.signal },
@@ -631,7 +633,7 @@ export class DaykeeperClient {
           `/v1/tenants/${pathSegment(tenantId)}/conversations/${positiveSafeInteger(conversationId)}/messages`,
           {
             signal: requestOptions.signal,
-            query: pageQuery(requestOptions, 200),
+            query: pageQuery(requestOptions),
           },
         ),
       reply: async (tenantId, conversationId, content, requestOptions = {}) =>
@@ -647,7 +649,7 @@ export class DaykeeperClient {
             signal: requestOptions.signal,
           },
         ),
-      setStatus: (tenantId, conversationId, input, requestOptions = {}) =>
+      setStatus: async (tenantId, conversationId, input, requestOptions = {}) =>
         this.#request(
           `/v1/tenants/${pathSegment(tenantId)}/conversations/${positiveSafeInteger(conversationId)}`,
           {
@@ -946,16 +948,20 @@ function positiveSafeInteger(value: number): number {
   return value;
 }
 
-function pageQuery(
-  value: { cursor?: string; limit?: number },
-  maximum: number,
-): Readonly<Record<string, string>> {
+// The server's bounds for both conversation and message pages (contract 1.9.0).
+const MAX_PAGE_LIMIT = 100;
+const MAX_PAGE_CURSOR_LENGTH = 256;
+
+function pageQuery(value: {
+  cursor?: string;
+  limit?: number;
+}): Readonly<Record<string, string>> {
   const query: Record<string, string> = {};
   if (value.cursor !== undefined) {
     if (
       typeof value.cursor !== "string" ||
       value.cursor.length < 1 ||
-      value.cursor.length > 512 ||
+      value.cursor.length > MAX_PAGE_CURSOR_LENGTH ||
       /[\r\n]/.test(value.cursor)
     ) {
       throw configurationError("The page cursor is invalid");
@@ -966,9 +972,11 @@ function pageQuery(
     if (
       !Number.isInteger(value.limit) ||
       value.limit < 1 ||
-      value.limit > maximum
+      value.limit > MAX_PAGE_LIMIT
     ) {
-      throw configurationError(`Page limit must be from 1 through ${maximum}`);
+      throw configurationError(
+        `Page limit must be from 1 through ${MAX_PAGE_LIMIT}`,
+      );
     }
     query.limit = String(value.limit);
   }

@@ -5,12 +5,12 @@ import { DaykeeperClient } from "../src/client.ts";
 const list = {
   tenantId: "tenant-1",
   conversations: [{ id: 42, status: "open", preview: "Hello" }],
-  page: { limit: 100, nextCursor: null, hasMore: false },
+  page: { limit: 50, nextCursor: null, hasMore: false },
 };
 const messages = {
   tenantId: "tenant-1",
   conversationId: 42,
-  page: { limit: 200, nextCursor: null, hasMore: false },
+  page: { limit: 50, nextCursor: null, hasMore: false },
   messages: [
     {
       id: 7,
@@ -237,5 +237,81 @@ test("operator conversation inputs fail before transport", async () => {
     () => client.operatorConversations.reply("tenant", 1, "   "),
     { code: "INVALID_CONFIGURATION" },
   );
+  // Paging bounds match the server (contract 1.9.0): limit 1-100 on both
+  // lists, cursor at most 256 characters.
+  for (const options of [
+    { limit: 0 },
+    { limit: 101 },
+    { limit: 1.5 },
+    { cursor: "" },
+    { cursor: "c".repeat(257) },
+    { cursor: "line\nbreak" },
+  ]) {
+    await assert.rejects(
+      () => client.operatorConversations.list("tenant", options),
+      { code: "INVALID_CONFIGURATION" },
+      JSON.stringify(options),
+    );
+    await assert.rejects(
+      () => client.operatorConversations.messages("tenant", 1, options),
+      { code: "INVALID_CONFIGURATION" },
+      JSON.stringify(options),
+    );
+  }
+  await assert.rejects(() => client.operatorConversations.get("tenant", 0), {
+    code: "INVALID_CONFIGURATION",
+  });
+  await assert.rejects(
+    () =>
+      client.operatorConversations.setStatus("tenant", 1, {
+        status: "pending" as "open",
+      }),
+    { code: "INVALID_CONFIGURATION" },
+  );
+  await assert.rejects(
+    () =>
+      client.operatorConversations.reply("tenant", 1, "Reply", {
+        requestId: "not-a-uuid",
+      }),
+    { code: "INVALID_CONFIGURATION" },
+  );
   assert.equal(calls, 0);
+});
+
+test("operator lists accept the server bounds and older servers without page", async () => {
+  const requests: Request[] = [];
+  const client = new DaykeeperClient({
+    baseUrl: "https://api.example.com",
+    apiKey: "operator-key",
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      requests.push(request);
+      // A server before contract 1.9.0 ignores paging and omits `page`.
+      return Response.json({
+        data: request.url.includes("/messages")
+          ? {
+              tenantId: "tenant-1",
+              conversationId: 42,
+              messages: messages.messages,
+            }
+          : { tenantId: "tenant-1", conversations: list.conversations },
+      });
+    },
+  });
+  const cursor = "c".repeat(256);
+  const page = await client.operatorConversations.list("tenant-1", {
+    limit: 100,
+    cursor,
+  });
+  assert.equal(page.page, undefined);
+  const history = await client.operatorConversations.messages("tenant-1", 42, {
+    limit: 100,
+  });
+  assert.equal(history.page, undefined);
+  assert.equal(new URL(requests[0].url).searchParams.get("limit"), "100");
+  assert.equal(new URL(requests[0].url).searchParams.get("cursor"), cursor);
+  assert.equal(new URL(requests[1].url).searchParams.get("limit"), "100");
+  // No paging options sends no query at all, exactly as before 0.6.0.
+  await client.operatorConversations.list("tenant-1");
+  assert.equal(new URL(requests[2].url).search, "");
 });

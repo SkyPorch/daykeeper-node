@@ -13,9 +13,11 @@ export interface paths {
         };
         /**
          * Read the authenticated person's profile and connected workspace
-         * @description Requires daykeeper.accounts:read. Returns only the person and
-         *     workspace bound to the access token. The caller cannot select or
-         *     change the active workspace through this endpoint.
+         * @description New in 1.9.0. Requires a human OAuth access token issued for this API
+         *     with daykeeper.accounts:read; server keys, agent credentials, and
+         *     tokens issued for another resource receive 401. Returns only the
+         *     person and workspace bound to the access token. The caller cannot
+         *     select or change the active workspace through this endpoint.
          */
         get: operations["getProfile"];
         put?: never;
@@ -35,9 +37,11 @@ export interface paths {
         };
         /**
          * List workspaces available to the authenticated person
-         * @description Requires daykeeper.accounts:read. The current workspace remains the
-         *     one bound to the access token. This list cannot be used to change it;
-         *     reconnect through the host to use another workspace.
+         * @description New in 1.9.0. Requires a human OAuth access token issued for this API
+         *     with daykeeper.accounts:read; other credentials receive 401. The
+         *     current workspace remains the one bound to the access token. This list
+         *     cannot be used to change it; reconnect through the host to use another
+         *     workspace.
          */
         get: operations["listWorkspaces"];
         put?: never;
@@ -869,9 +873,12 @@ export interface paths {
          * List support conversations for one tenant
          * @description Requires daykeeper.conversations:read. The tenant is selected only by
          *     the authenticated principal and path; provider credentials and
-         *     provider-internal identifiers are never returned. Results are paginated
-         *     with at most 100 conversations per page. A cursor continues the current
-         *     tenant's list. This is a read-only operation.
+         *     provider-internal identifiers are never returned. Results are bounded
+         *     to 100 conversations, newest activity first. From 1.9.0 the list is
+         *     paginated: `limit` (default 50) bounds the page and `page.nextCursor`
+         *     continues the same tenant's list until it is null. Servers before
+         *     1.9.0 ignore both parameters and omit `page`. This is a read-only
+         *     operation.
          */
         get: operations["listOperatorConversations"];
         put?: never;
@@ -894,7 +901,9 @@ export interface paths {
         };
         /**
          * Read one support conversation
-         * @description Requires daykeeper.conversations:read and returns one tenant-bound conversation summary.
+         * @description New in 1.9.0. Requires daykeeper.conversations:read and returns one
+         *     tenant-bound conversation summary. A conversation in another tenant
+         *     answers 404. This is a read-only operation.
          */
         get: operations["getOperatorConversation"];
         put?: never;
@@ -904,7 +913,12 @@ export interface paths {
         head?: never;
         /**
          * Set a support conversation's open or resolved status
-         * @description Requires daykeeper.conversations:write. Only the status may be changed.
+         * @description New in 1.9.0. Requires daykeeper.conversations:write. Only the status
+         *     may be changed. Setting the status the conversation already has
+         *     changes nothing and returns the current summary. The server reads the
+         *     conversation again and confirms the requested status before answering
+         *     200; if it cannot confirm, the request fails and the caller should
+         *     read the conversation before repeating it.
          */
         patch: operations["setOperatorConversationStatus"];
         trace?: never;
@@ -921,21 +935,35 @@ export interface paths {
         };
         /**
          * Read messages for one support conversation
-         * @description Requires daykeeper.conversations:read. The first page contains the
-         *     latest messages, sorted oldest to newest. Pass `cursor` from the page
-         *     to read older messages. Each page is bounded to 200 and provider
-         *     internals are omitted.
+         * @description Requires daykeeper.conversations:read. Messages are bounded to 200
+         *     and provider internals are omitted. From 1.9.0 the list is paginated:
+         *     the first page holds the latest messages (`limit`, default 50), sorted
+         *     oldest to newest, and `page.nextCursor` reads older messages until it
+         *     is null. A full provider batch keeps `hasMore` true conservatively, so
+         *     a final page may be empty. Servers before 1.9.0 ignore both parameters
+         *     and omit `page`.
          */
         get: operations["listOperatorConversationMessages"];
         put?: never;
         /**
          * Send one plain-text support reply
          * @description Requires daykeeper.conversations:write. The server dispatches the
-         *     provider write once and does not automatically retry it. If the
-         *     response is lost, repeat the exact request with the same
-         *     Idempotency-Key to receive its original result without sending a
-         *     duplicate reply. The header is optional for compatibility with older
-         *     callers. Content is trimmed and limited to 4,000 characters.
+         *     provider write once and does not automatically retry it. Content is
+         *     trimmed and limited to 4,000 characters.
+         *
+         *     Without `Idempotency-Key` (the behavior before 1.9.0, still accepted)
+         *     a lost response leaves the outcome unknown: inspect the conversation
+         *     and messages before deciding whether to repeat the request.
+         *
+         *     From 1.9.0 a caller may send a UUID `Idempotency-Key`. Repeating the
+         *     exact request (same tenant, conversation, and content) with the same
+         *     key returns the original message with 200 instead of sending a
+         *     duplicate. Reusing a key for a different request, or repeating it while
+         *     the first attempt is still in progress, answers 409. An error with
+         *     `outcomeUnknown: true` may be retried with the same key. An
+         *     installation without durable reply idempotency answers
+         *     FEATURE_UNAVAILABLE (503) to a request that carries the header; see
+         *     `operatorConversations.idempotentReplies` in capabilities.
          */
         post: operations["sendOperatorConversationReply"];
         delete?: never;
@@ -955,13 +983,18 @@ export interface paths {
         };
         /**
          * Read customer email settings
-         * @description Requires a human-owner credential with daykeeper.accounts:read.
+         * @description New in 1.9.0 on the bearer API. Requires daykeeper.accounts:read and
+         *     access to the tenant; workspace members can read the setting. A tenant
+         *     in another organization answers 404.
          */
         get: operations["getCustomerEmail"];
         put?: never;
         /**
          * Update customer email settings
-         * @description Requires a human-owner credential with daykeeper.accounts:write.
+         * @description New in 1.9.0 on the bearer API. Requires a human principal holding
+         *     daykeeper.accounts:write (a workspace owner); other principals receive
+         *     403. Accepts exactly `{ "enabled": boolean }` and returns the stored
+         *     setting.
          */
         post: operations["setCustomerEmail"];
         delete?: never;
@@ -1257,9 +1290,15 @@ export interface paths {
          *     per-principal request limits answer RATE_LIMITED with a Retry-After
          *     header. A client should treat either as retryable after the interval.
          *
-         *     Daykeeper sends no email. The claim URL carries the token in its
-         *     fragment so it never reaches server logs or referrers; it is a secret,
-         *     it is shown once, and the agent delivers it out of band.
+         *     The claim URL carries the token in its fragment so it never reaches
+         *     server logs or referrers; it is a secret, it is shown once, and the
+         *     agent delivers it out of band. An installation may also be configured
+         *     to email the link to the claimed address when a new claim is created
+         *     (never on a replay); only such an installation adds the optional
+         *     `emailed` field, saying whether this response did. Servers before
+         *     1.8.0 and installations that do not email claims (the default) omit
+         *     it, so their results keep the 1.7 shape exactly; operators must
+         *     upgrade clients to 1.8.0 before turning claim emails on.
          *
          *     When a request fails without a usable response its outcome is unknown.
          *     Repeat it with the same key and the exact original body to learn what
@@ -1329,10 +1368,12 @@ export interface components {
             organizationId: string;
             organizationSlug: string;
             name: string;
-            role: string;
+            /** @description Optional. The person's role in the workspace when the server reports it, such as `owner` or `member`. Absent does not imply either role. */
+            role?: string;
         } & {
             [key: string]: unknown;
         };
+        /** @description Workspaces the person can reach through this connection. The workspace bound to the access token is always the active one. */
         WorkspaceList: {
             items: components["schemas"]["Workspace"][];
         } & {
@@ -1342,9 +1383,13 @@ export interface components {
             /** Format: uuid */
             tenantId: string;
             enabled: boolean;
-            customSender: string | null;
-            senderName: string | null;
+            /** @description True when the workspace sends from its own verified domain; the switch then has no effect. */
+            customSender: boolean;
+            /** @description The name customers see in the From line. */
+            senderName: string;
+            /** @description Where shared tenant email is sent from on this installation. Null when the installation does not send it yet; the switch is still saved. */
             sendingDomain: string | null;
+            /** @description Whether this installation sends shared tenant email at all. */
             deliveryEnabled: boolean;
         } & {
             [key: string]: unknown;
@@ -1352,15 +1397,21 @@ export interface components {
         CustomerEmailInput: {
             enabled: boolean;
         };
+        /** @description New in 1.9.0. Pass `nextCursor` unchanged to read the next page; null means there is no next page. */
         OperatorConversationPage: {
             limit: number;
             nextCursor: string | null;
             hasMore: boolean;
+        } & {
+            [key: string]: unknown;
         };
+        /** @description New in 1.9.0. Pass `nextCursor` unchanged to read the next page; null means there is no next page. */
         OperatorConversationMessagesPage: {
             limit: number;
             nextCursor: string | null;
             hasMore: boolean;
+        } & {
+            [key: string]: unknown;
         };
         /** @enum {string} */
         OperatorConversationStatus: "open" | "resolved";
@@ -1382,6 +1433,8 @@ export interface components {
             /** Format: int64 */
             conversationId: number;
             conversation: components["schemas"]["OperatorConversation"];
+        } & {
+            [key: string]: unknown;
         };
         OperatorConversation: {
             /** Format: int64 */
@@ -1412,7 +1465,8 @@ export interface components {
             /** Format: uuid */
             tenantId: string;
             conversations: components["schemas"]["OperatorConversation"][];
-            page: components["schemas"]["OperatorConversationPage"];
+            /** @description Optional; absent on servers before 1.9.0. */
+            page?: components["schemas"]["OperatorConversationPage"];
         } & {
             [key: string]: unknown;
         };
@@ -1422,7 +1476,8 @@ export interface components {
             /** Format: int64 */
             conversationId: number;
             messages: components["schemas"]["OperatorMessage"][];
-            page: components["schemas"]["OperatorConversationMessagesPage"];
+            /** @description Optional; absent on servers before 1.9.0. */
+            page?: components["schemas"]["OperatorConversationMessagesPage"];
         } & {
             [key: string]: unknown;
         };
@@ -1500,6 +1555,37 @@ export interface components {
                 enabled: boolean;
                 /** @description True when `http://localhost`, `http://127.0.0.1` and `http://[::1]` origins are accepted, for local development. */
                 loopbackOrigins: boolean;
+            } & {
+                [key: string]: unknown;
+            };
+            /**
+             * @description Optional. `enabled: false` means the operator conversation routes
+             *     are not available. Servers before 1.9.0 send at most `enabled`; an
+             *     absent sub-flag means that feature is not available. Open to
+             *     fields added in later minor versions.
+             */
+            operatorConversations?: {
+                enabled: boolean;
+                /** @description True when conversation and message reads accept `limit` and `cursor` and return `page`. */
+                pagination?: boolean;
+                /** @description True when PATCH /v1/tenants/{tenantId}/conversations/{conversationId} is available. */
+                statusUpdates?: boolean;
+                /** @description True when replies accept `Idempotency-Key`. When false, a reply carrying the header answers FEATURE_UNAVAILABLE (503). */
+                idempotentReplies?: boolean;
+            } & {
+                [key: string]: unknown;
+            };
+            /** @description Optional; absent on servers before 1.9.0. True when the customer email routes are available on the bearer API. */
+            customerEmail?: {
+                enabled: boolean;
+                /** @description Whether this installation sends shared tenant email at all. */
+                deliveryEnabled?: boolean;
+            } & {
+                [key: string]: unknown;
+            };
+            /** @description Optional; absent on servers before 1.9.0. True when GET /v1/profile and GET /v1/workspaces are available. */
+            dashboardIdentity?: {
+                enabled: boolean;
             } & {
                 [key: string]: unknown;
             };
@@ -2338,8 +2424,8 @@ export interface components {
              *     characters that neither start nor end with a hyphen, separated by
              *     dots, and at least one dot is required. Uppercase is rejected rather
              *     than folded so the stored address matches the one that signs in.
-             *     Daykeeper sends no email; the caller delivers the returned claim URL
-             *     out of band.
+             *     The caller delivers the returned claim URL; an installation may also
+             *     email it to this address (see `emailed` on the result).
              * @example gabriel@acme.com
              * @example gabriel+claims@mail.acme.co.uk
              */
@@ -2361,6 +2447,18 @@ export interface components {
             claimUrl: string;
             /** @constant */
             replayed: false;
+            /**
+             * @description Whether this request emailed the claim URL to the claimed address.
+             *     Present only on an installation that emails claim links, and then
+             *     `false` when the send did not succeed (a failed send never fails
+             *     the claim). An installation that does not email claims, which is
+             *     the default, omits the field, so its responses keep the 1.7 shape
+             *     that this schema's `additionalProperties: false` accepted.
+             *     Operators must move clients to 1.8.0 before turning claim emails
+             *     on. The email carries the link and its expiry and no text the
+             *     agent chose.
+             */
+            emailed?: boolean;
         };
         /**
          * @description The result of an exact repeat under the same idempotency key: the
@@ -2375,6 +2473,14 @@ export interface components {
             claimUrl: null;
             /** @constant */
             replayed: true;
+            /**
+             * @description Present only on an installation that emails claim links, and then
+             *     always `false`: a replay sends no email, and whether the original
+             *     request emailed the link is not repeated. Omitted elsewhere, as on
+             *     the created result.
+             * @constant
+             */
+            emailed?: false;
         };
         /**
          * @description Either result of a create call, discriminated by `replayed`: a fresh
@@ -3999,7 +4105,9 @@ export interface operations {
     listOperatorConversations: {
         parameters: {
             query?: {
+                /** @description Opaque `page.nextCursor` from the previous page, passed unchanged. */
                 cursor?: string;
+                /** @description Maximum items on this page. Defaults to 50. */
                 limit?: number;
             };
             header?: never;
@@ -4040,6 +4148,7 @@ export interface operations {
             /** @description The requested conversation. */
             200: {
                 headers: {
+                    "Daykeeper-Credential-Expires-At": components["headers"]["DaykeeperCredentialExpiresAt"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4068,9 +4177,10 @@ export interface operations {
             };
         };
         responses: {
-            /** @description The conversation status was updated. */
+            /** @description The conversation now has the requested status. */
             200: {
                 headers: {
+                    "Daykeeper-Credential-Expires-At": components["headers"]["DaykeeperCredentialExpiresAt"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4087,7 +4197,9 @@ export interface operations {
     listOperatorConversationMessages: {
         parameters: {
             query?: {
+                /** @description Opaque `page.nextCursor` from the previous page, passed unchanged. */
                 cursor?: string;
+                /** @description Maximum items on this page. Defaults to 50. */
                 limit?: number;
             };
             header?: never;
@@ -4119,7 +4231,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description UUID for one reply attempt. Reuse it only with the exact same conversation and body. */
+                /** @description New in 1.9.0. UUID for one reply attempt. Reuse it only with the exact same conversation and body. */
                 "Idempotency-Key"?: string;
             };
             path: {
@@ -4134,9 +4246,10 @@ export interface operations {
             };
         };
         responses: {
-            /** @description The reply result returned for an exact replay. */
+            /** @description The original reply, returned for an exact replay of an Idempotency-Key request. Nothing new was sent. */
             200: {
                 headers: {
+                    "Daykeeper-Credential-Expires-At": components["headers"]["DaykeeperCredentialExpiresAt"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4157,6 +4270,7 @@ export interface operations {
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
             404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
             default: components["responses"]["Error"];
         };
     };
@@ -4174,6 +4288,7 @@ export interface operations {
             /** @description Customer email settings. */
             200: {
                 headers: {
+                    "Cache-Control"?: "no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4204,6 +4319,7 @@ export interface operations {
             /** @description Updated customer email settings. */
             200: {
                 headers: {
+                    "Cache-Control"?: "no-store";
                     [name: string]: unknown;
                 };
                 content: {

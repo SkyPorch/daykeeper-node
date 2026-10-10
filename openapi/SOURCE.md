@@ -1,15 +1,35 @@
 # Contract source
 
-`daykeeper.yaml` is kept byte-for-byte aligned with the canonical
-`artifacts/daykeeper-dashboard/openapi/openapi/daykeeper.yaml` in this
-workspace. It is a draft of management contract `1.8.0`; do not cite an
-upstream tag or commit until that canonical change has been released.
+**Branch pin, not releasable.** `daykeeper.yaml` is an exact, byte-for-byte
+copy of `openapi/daykeeper.yaml` from the head of `SkyPorch/daykeeper-openapi`
+PR #42 (branch `codex/daykeeper-dashboard`), commit
+`95f1f4c1cf94eb7bac3461d8fb3389b88d1265a6`, contract `1.9.0`. That contract is
+not merged or tagged yet. **Before an SDK release:** merge openapi#42, tag
+`v1.9.0`, re-vendor from the tag, record the tag and its commit here and in
+`COMPATIBILITY.md`, and re-run `pnpm check` (the checksums below are verified by
+`test/contractSource.test.mjs`).
 
-The 1.8.0 additions cover authenticated-person profile and workspace reads,
-customer email preferences, conversation status changes, cursor pagination for
-conversation and message lists, direct conversation reads, and optional reply idempotency keys. The
-response types preserve existing fields while adding page metadata. The Node
-SDK generated schema is produced from this copied file with `pnpm generate`.
+- SHA-256: `2b4825d85a7c488183b8403d18e1da0d17aa01d0145f4415020e3dff7d52b694`
+- Git blob: `720c0e8224c25f6011d43f09c16c5efdae9c0857`
+
+There is no local delta. This repository does not modify the vendored contract.
+
+`1.9.0` documents the Daykeeper Dashboard management API: `GET /v1/profile`
+and `GET /v1/workspaces` (human OAuth, `daykeeper.accounts:read`); `GET` and
+`PATCH /v1/tenants/{tenantId}/conversations/{conversationId}` (read one
+conversation, set `open`/`resolved`); optional `limit` (1-100, default 50) and
+`cursor` (at most 256 characters) on the conversation and message lists, with
+an optional `page: { limit, nextCursor, hasMore }` that servers before 1.9.0
+omit; an optional UUID `Idempotency-Key` on operator replies (exact replay
+answers `200`, a reused key `409`); `GET`/`POST
+/v1/tenants/{tenantId}/customer-email`; and optional capability flags
+`operatorConversations`, `customerEmail` and `dashboardIdentity`. It also
+carries the already-tagged `1.7.0` (web clients) and `1.8.0` (optional
+`emailed` on workspace claim results) changes, which this SDK does not wrap.
+
+The previous pin, tag `v1.6.0`, commit
+`f563df6fffca80d7d2c634e270604b6e61561152` (the squash merge of
+`daykeeper-openapi` PR #34):
 
 `1.6.0` adds agent credential rotation: `POST
 /v1/agent-credentials/{agentCredentialId}/rotate` with a required
@@ -151,5 +171,5 @@ are required for activation. The new SDK methods need the corresponding reviewed
 server version; older servers remain compatible with existing account-only
 methods.
 
-The baseline sections above describe previously released sources. This 1.8.0
-snapshot remains a local draft until the canonical contract is released.
+The source above is the immutable `v1.6.0` tag, which satisfies `RELEASING.md`
+step 2 for 0.5.0.

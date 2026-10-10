@@ -58,9 +58,9 @@ test("customer email settings read and write the enabled field", async () => {
   const settings = {
     tenantId: "20000000-0000-4000-8000-000000000001",
     enabled: true,
-    customSender: null,
-    senderName: null,
-    sendingDomain: null,
+    customSender: false,
+    senderName: "Acme",
+    sendingDomain: "mail.example.com",
     deliveryEnabled: true,
   };
   const client = new DaykeeperClient({
@@ -86,4 +86,51 @@ test("customer email settings read and write the enabled field", async () => {
     ],
   );
   assert.deepEqual(await requests[1]?.clone().json(), { enabled: true });
+});
+
+test("customer email input must be exactly { enabled: boolean }", async () => {
+  let calls = 0;
+  const client = new DaykeeperClient({
+    baseUrl: "https://api.example.com",
+    token: "workspace-token",
+    fetch: async () => {
+      calls += 1;
+      return Response.json({ data: {} });
+    },
+  });
+  for (const input of [
+    {},
+    { enabled: "yes" },
+    { enabled: true, senderName: "x" },
+  ])
+    await assert.rejects(
+      () =>
+        client.customerEmail.set(
+          "20000000-0000-4000-8000-000000000001",
+          input as { enabled: boolean },
+        ),
+      { code: "INVALID_CONFIGURATION" },
+    );
+  assert.equal(calls, 0);
+});
+
+test("a workspace without a role is accepted, as the deployed server sends it", async () => {
+  const client = new DaykeeperClient({
+    baseUrl: "https://api.example.com",
+    token: "workspace-token",
+    fetch: async () =>
+      Response.json({
+        data: {
+          items: [
+            {
+              organizationId: "20000000-0000-4000-8000-000000000001",
+              organizationSlug: "acme",
+              name: "Acme",
+            },
+          ],
+        },
+      }),
+  });
+  const { items } = await client.workspaces.list();
+  assert.equal(items[0]?.role, undefined);
 });

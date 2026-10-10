@@ -169,7 +169,8 @@ export interface OperatorMessage {
 export interface OperatorConversationList {
   tenantId: string;
   conversations: readonly OperatorConversation[];
-  page: OperatorConversationPage;
+  /** Absent on servers before contract 1.9.0. */
+  page?: OperatorConversationPage;
 }
 
 export interface OperatorConversationDetail {
@@ -182,7 +183,8 @@ export interface OperatorConversationMessages {
   tenantId: string;
   conversationId: number;
   messages: readonly OperatorMessage[];
-  page: OperatorConversationMessagesPage;
+  /** Absent on servers before contract 1.9.0. */
+  page?: OperatorConversationMessagesPage;
 }
 
 export interface OperatorConversationReply {
