@@ -519,7 +519,10 @@ flow-idempotency changes listed in the changelog. Version `0.2.1` corrects
 paid-policy types; see its TypeScript compatibility note. It was staged but
 never approved, so it is not on npm; `0.3.0`, also published by hand, carries
 it and adds workspace claims. `0.4.0` makes agent credentials last until
-revoked by default. `0.5.0` adds agent credential rotation. Types are
+revoked by default. `0.5.0` adds agent credential rotation. `0.6.0` adds the
+Daykeeper Dashboard methods (profile, workspaces, customer email, direct
+conversation reads, status updates, opt-in pagination and reply idempotency)
+from contract `v1.9.0`. Types are
 generated from the vendored Daykeeper OpenAPI commit recorded in
 [`openapi/SOURCE.md`](openapi/SOURCE.md); the SDK-to-contract mapping is in
 [`COMPATIBILITY.md`](COMPATIBILITY.md). Releases use the protected,

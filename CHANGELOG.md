@@ -1,10 +1,12 @@
 # Changelog
 
-## 0.6.0 - Unreleased
+## 0.6.0
 
-Vendors contract `1.9.0` from the head of `SkyPorch/daykeeper-openapi` PR #42
-(`9886648`)
-(a branch pin; see `openapi/SOURCE.md`). Re-pin to tag `v1.9.0` before release.
+Generated from management contract `1.9.0`, tag `v1.9.0`, commit
+`316497e9d78ed084d96ab39482451d9cc13bbfc9`. Requires a server implementing
+1.9.0 for the new methods (`SkyPorch/daykeeper` #313); every 0.5.0 method is
+unchanged. No breaking changes: the new result fields and request options are
+optional.
 
 ### Added
 

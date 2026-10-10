@@ -1,16 +1,16 @@
 # Contract source
 
-**Branch pin, not releasable.** `daykeeper.yaml` is an exact, byte-for-byte
-copy of `openapi/daykeeper.yaml` from the head of `SkyPorch/daykeeper-openapi`
-PR #42 (branch `codex/daykeeper-dashboard`), commit
-`9886648629cd14d01a7b3aaef498fd9221473025`, contract `1.9.0`. That contract is
-not merged or tagged yet. **Before an SDK release:** merge openapi#42, tag
-`v1.9.0`, re-vendor from the tag, record the tag and its commit here and in
-`COMPATIBILITY.md`, and re-run `pnpm check` (the checksums below are verified by
-`test/contractSource.test.mjs`).
+`daykeeper.yaml` is an exact, byte-for-byte copy of `openapi/daykeeper.yaml`
+from `SkyPorch/daykeeper-openapi` tag `v1.9.0` (annotated tag object
+`3063adef6a81ead53ddf6ae2afc4d564ef6b3169`), commit
+`316497e9d78ed084d96ab39482451d9cc13bbfc9` (contract `1.9.0`, the squash merge
+of `daykeeper-openapi` PR #42).
 
 - SHA-256: `ac0da6e342dc564a58a6a97eff0f4437d4b4d8bf0b6891b7ad4e0f500afa95db`
 - Git blob: `1792731b99e360e55dd965afa629403cac73b8df`
+
+The bytes are identical to the reviewed PR head `9886648` that this SDK was
+developed against; the SHA-256 and Git blob were re-verified against the tag.
 
 There is no local delta. This repository does not modify the vendored contract.
 
@@ -26,9 +26,7 @@ answers `200`, a reused key `409`); `GET`/`POST
 /v1/tenants/{tenantId}/customer-email`; and optional capability flags
 `operatorConversations` (`statusUpdates` covers both GET and PATCH on one
 conversation), `customerEmail` and `dashboardIdentity`; and a human
-`authorizationCode` OAuth flow beside client credentials. Relative to the
-previous branch pin (`95f1f4c`), only descriptions, the OAuth flow and the
-opt-in pagination rule changed; the generated types differ only in comments. It also
+`authorizationCode` OAuth flow beside client credentials. It also
 carries the already-tagged `1.7.0` (web clients) and `1.8.0` (optional
 `emailed` on workspace claim results) changes, which this SDK does not wrap.
 
