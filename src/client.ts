@@ -14,6 +14,8 @@ import type {
   CreateFlowInput,
   CreateFlowVersionInput,
   CreateCustomerSessionInput,
+  CustomerEmail,
+  CustomerEmailInput,
   CustomerSession,
   DaykeeperCapabilities,
   EntitlementStatus,
@@ -39,8 +41,13 @@ import type {
   DomainVerificationInput,
   ApiInboxActivationReceipt,
   OperatorConversationList,
+  OperatorConversationDetail,
   OperatorConversationMessages,
   OperatorConversationReply,
+  OperatorConversationStatusInput,
+  OperatorConversationStatusResult,
+  Profile,
+  WorkspaceList,
   WorkspaceClaim,
   WorkspaceClaimList,
   WorkspaceClaimResult,
@@ -55,6 +62,8 @@ const MAX_RESPONSE_BYTES = 1024 * 1024;
 // is resolved against the configured base URL.
 const SEGMENT = "[^/?#]+";
 const ALLOWED_PATHS: readonly RegExp[] = [
+  "/v1/profile",
+  "/v1/workspaces",
   "/v1/capabilities",
   "/v1/entitlements",
   "/v1/usage",
@@ -81,7 +90,9 @@ const ALLOWED_PATHS: readonly RegExp[] = [
   `/v1/tenants/${SEGMENT}/inbox-activations/${SEGMENT}`,
   `/v1/tenants/${SEGMENT}/inbox-activations/${SEGMENT}/revoke`,
   `/v1/tenants/${SEGMENT}/conversations`,
+  `/v1/tenants/${SEGMENT}/conversations/[1-9][0-9]*`,
   `/v1/tenants/${SEGMENT}/conversations/[1-9][0-9]*/messages`,
+  `/v1/tenants/${SEGMENT}/customer-email`,
   `/v1/tenants/${SEGMENT}/flows`,
   "/v1/email-channels:apply",
   `/v1/operations/${SEGMENT}`,
@@ -150,6 +161,21 @@ export interface DaykeeperRequestOptions {
   signal?: AbortSignal;
 }
 
+export interface OperatorConversationListOptions extends DaykeeperRequestOptions {
+  cursor?: string;
+  limit?: number;
+}
+
+export interface OperatorConversationMessagesOptions extends DaykeeperRequestOptions {
+  cursor?: string;
+  limit?: number;
+}
+
+export interface OperatorConversationReplyOptions extends DaykeeperRequestOptions {
+  /** UUID generated once for this logical reply and reused if its result is uncertain. */
+  requestId?: string;
+}
+
 export interface DaykeeperApplyOptions extends DaykeeperRequestOptions {
   idempotencyKey: string;
 }
@@ -158,6 +184,12 @@ export type DaykeeperIdempotencyOptions = DaykeeperApplyOptions;
 
 export class DaykeeperClient {
   readonly capabilities: () => Promise<DaykeeperCapabilities>;
+  readonly profile: {
+    get: (options?: DaykeeperRequestOptions) => Promise<Profile>;
+  };
+  readonly workspaces: {
+    list: (options?: DaykeeperRequestOptions) => Promise<WorkspaceList>;
+  };
   readonly entitlements: {
     get: (options?: DaykeeperRequestOptions) => Promise<EntitlementStatus>;
   };
@@ -260,6 +292,17 @@ export class DaykeeperClient {
       options?: DaykeeperRequestOptions,
     ) => Promise<CustomerSession>;
   };
+  readonly customerEmail: {
+    get: (
+      tenantId: string,
+      options?: DaykeeperRequestOptions,
+    ) => Promise<CustomerEmail>;
+    set: (
+      tenantId: string,
+      input: CustomerEmailInput,
+      options?: DaykeeperRequestOptions,
+    ) => Promise<CustomerEmail>;
+  };
   readonly domainVerifications: {
     create: (
       tenantId: string,
@@ -301,19 +344,30 @@ export class DaykeeperClient {
   readonly operatorConversations: {
     list: (
       tenantId: string,
-      options?: DaykeeperRequestOptions,
+      options?: OperatorConversationListOptions,
     ) => Promise<OperatorConversationList>;
-    messages: (
+    get: (
       tenantId: string,
       conversationId: number,
       options?: DaykeeperRequestOptions,
+    ) => Promise<OperatorConversationDetail>;
+    messages: (
+      tenantId: string,
+      conversationId: number,
+      options?: OperatorConversationMessagesOptions,
     ) => Promise<OperatorConversationMessages>;
     reply: (
       tenantId: string,
       conversationId: number,
       content: string,
-      options?: DaykeeperRequestOptions,
+      options?: OperatorConversationReplyOptions,
     ) => Promise<OperatorConversationReply>;
+    setStatus: (
+      tenantId: string,
+      conversationId: number,
+      input: OperatorConversationStatusInput,
+      options?: DaykeeperRequestOptions,
+    ) => Promise<OperatorConversationStatusResult>;
   };
   readonly operations: {
     get: (operationId: string) => Promise<Operation>;
@@ -367,6 +421,14 @@ export class DaykeeperClient {
     }
 
     this.capabilities = () => this.#request("/v1/capabilities");
+    this.profile = {
+      get: (requestOptions = {}) =>
+        this.#request("/v1/profile", { signal: requestOptions.signal }),
+    };
+    this.workspaces = {
+      list: (requestOptions = {}) =>
+        this.#request("/v1/workspaces", { signal: requestOptions.signal }),
+    };
     this.entitlements = {
       get: (requestOptions = {}) =>
         this.#request("/v1/entitlements", { signal: requestOptions.signal }),
@@ -490,6 +552,20 @@ export class DaykeeperClient {
           },
         ),
     };
+    // Async so an invalid argument rejects the returned promise instead of
+    // throwing synchronously.
+    this.customerEmail = {
+      get: async (tenantId, requestOptions = {}) =>
+        this.#request(`/v1/tenants/${pathSegment(tenantId)}/customer-email`, {
+          signal: requestOptions.signal,
+        }),
+      set: async (tenantId, input, requestOptions = {}) =>
+        this.#request(`/v1/tenants/${pathSegment(tenantId)}/customer-email`, {
+          method: "POST",
+          body: validateCustomerEmailInput(input),
+          signal: requestOptions.signal,
+        }),
+    };
     this.domainVerifications = {
       create: (tenantId, input, requestOptions) =>
         this.#request(
@@ -542,14 +618,23 @@ export class DaykeeperClient {
         ),
     };
     this.operatorConversations = {
-      list: (tenantId, requestOptions = {}) =>
+      list: async (tenantId, requestOptions = {}) =>
         this.#request(`/v1/tenants/${pathSegment(tenantId)}/conversations`, {
           signal: requestOptions.signal,
+          query: pageQuery(requestOptions),
         }),
+      get: async (tenantId, conversationId, requestOptions = {}) =>
+        this.#request(
+          `/v1/tenants/${pathSegment(tenantId)}/conversations/${positiveSafeInteger(conversationId)}`,
+          { signal: requestOptions.signal },
+        ),
       messages: async (tenantId, conversationId, requestOptions = {}) =>
         this.#request(
           `/v1/tenants/${pathSegment(tenantId)}/conversations/${positiveSafeInteger(conversationId)}/messages`,
-          { signal: requestOptions.signal },
+          {
+            signal: requestOptions.signal,
+            query: pageQuery(requestOptions),
+          },
         ),
       reply: async (tenantId, conversationId, content, requestOptions = {}) =>
         this.#request(
@@ -557,6 +642,19 @@ export class DaykeeperClient {
           {
             method: "POST",
             body: { content: validateOperatorContent(content) },
+            idempotencyKey:
+              requestOptions.requestId === undefined
+                ? undefined
+                : validateOperatorRequestId(requestOptions.requestId),
+            signal: requestOptions.signal,
+          },
+        ),
+      setStatus: async (tenantId, conversationId, input, requestOptions = {}) =>
+        this.#request(
+          `/v1/tenants/${pathSegment(tenantId)}/conversations/${positiveSafeInteger(conversationId)}`,
+          {
+            method: "PATCH",
+            body: validateOperatorConversationStatusInput(input),
             signal: requestOptions.signal,
           },
         ),
@@ -612,7 +710,7 @@ export class DaykeeperClient {
   async #request<T>(
     path: string,
     options: {
-      method?: "GET" | "POST";
+      method?: "GET" | "POST" | "PATCH";
       body?: unknown;
       idempotencyKey?: string;
       requireIdempotencyKey?: boolean;
@@ -848,6 +946,79 @@ function positiveSafeInteger(value: number): number {
       "Conversation identifiers must be positive safe integers",
     );
   return value;
+}
+
+// The server's bounds for both conversation and message pages (contract 1.9.0).
+const MAX_PAGE_LIMIT = 100;
+const MAX_PAGE_CURSOR_LENGTH = 256;
+
+function pageQuery(value: {
+  cursor?: string;
+  limit?: number;
+}): Readonly<Record<string, string>> {
+  const query: Record<string, string> = {};
+  if (value.cursor !== undefined) {
+    if (
+      typeof value.cursor !== "string" ||
+      value.cursor.length < 1 ||
+      value.cursor.length > MAX_PAGE_CURSOR_LENGTH ||
+      /[\r\n]/.test(value.cursor)
+    ) {
+      throw configurationError("The page cursor is invalid");
+    }
+    query.cursor = value.cursor;
+  }
+  if (value.limit !== undefined) {
+    if (
+      !Number.isInteger(value.limit) ||
+      value.limit < 1 ||
+      value.limit > MAX_PAGE_LIMIT
+    ) {
+      throw configurationError(
+        `Page limit must be from 1 through ${MAX_PAGE_LIMIT}`,
+      );
+    }
+    query.limit = String(value.limit);
+  }
+  return query;
+}
+
+function validateOperatorRequestId(value: string): string {
+  if (
+    typeof value !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value,
+    )
+  ) {
+    throw configurationError("Reply requestId must be a UUID v4");
+  }
+  return value;
+}
+
+function validateCustomerEmailInput(
+  value: CustomerEmailInput,
+): CustomerEmailInput {
+  if (
+    !value ||
+    Object.keys(value).length !== 1 ||
+    typeof value.enabled !== "boolean"
+  ) {
+    throw configurationError("Customer email input requires only enabled");
+  }
+  return { enabled: value.enabled };
+}
+
+function validateOperatorConversationStatusInput(
+  value: OperatorConversationStatusInput,
+): OperatorConversationStatusInput {
+  if (
+    !value ||
+    Object.keys(value).length !== 1 ||
+    (value.status !== "open" && value.status !== "resolved")
+  ) {
+    throw configurationError("Conversation status must be open or resolved");
+  }
+  return { status: value.status };
 }
 
 function validateOperatorContent(value: string): string {
