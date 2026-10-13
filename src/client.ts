@@ -247,7 +247,13 @@ export class DaykeeperClient {
       input: CreateWorkspaceClaimInput,
       options: DaykeeperIdempotencyOptions,
     ) => Promise<WorkspaceClaimResult>;
-    list: (options?: DaykeeperRequestOptions) => Promise<WorkspaceClaimList>;
+    /**
+     * Open claims nobody accepted yet (address null) are listed only with
+     * `includeOpen: true` (contract 1.10.0).
+     */
+    list: (
+      options?: DaykeeperRequestOptions & { includeOpen?: boolean },
+    ) => Promise<WorkspaceClaimList>;
     revoke: (
       claimId: string,
       options?: DaykeeperRequestOptions,
@@ -486,6 +492,10 @@ export class DaykeeperClient {
       list: (requestOptions = {}) =>
         this.#request("/v1/workspace-claims", {
           signal: requestOptions.signal,
+          query:
+            requestOptions.includeOpen === true
+              ? { include: "open" }
+              : undefined,
         }),
       revoke: (claimId, requestOptions = {}) =>
         this.#request(`/v1/workspace-claims/${pathSegment(claimId)}/revoke`, {

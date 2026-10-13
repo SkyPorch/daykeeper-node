@@ -2,12 +2,12 @@
 
 `daykeeper.yaml` is an exact, byte-for-byte copy of `openapi/daykeeper.yaml`
 from `SkyPorch/daykeeper-openapi` branch `claude/open-workspace-claims`,
-commit `de5dc104a64911fbbc5977d02714b9e2ad61576a` (contract `1.10.0`, the
+commit `7c7980cd02b5c8b9f6d6bc84a693435746a41998` (contract `1.10.0`, the
 open workspace claims change). It is not tagged yet: re-vendor from the
 `v1.10.0` tag, and re-verify both hashes below, before releasing.
 
-- SHA-256: `70eb116d49c5c010bcd48e5f1ff568f5e870476f050061197e9b6928f5c5118b`
-- Git blob: `7ae29f04d7b053cbc2f44db5d716d43c4c4ecc55`
+- SHA-256: `41635e36b236e8f816332bde5eb6987a30783a7312e32a08b536128b15c327d4`
+- Git blob: `c5343c152528a6c78593246ce3a98973a94758e3`
 
 There is no local delta. This repository does not modify the vendored contract.
 
@@ -15,7 +15,9 @@ There is no local delta. This repository does not modify the vendored contract.
 `WorkspaceClaim.email` `string | null`. A create without an address issues an
 open claim: a single-use link any signed-in person with a verified email may
 accept once, becoming an owner. Its address is null until it is accepted and
-the accepting address afterwards.
+the accepting address afterwards. `GET /v1/workspace-claims` lists open claims
+nobody accepted only with `include=open`, so a client from before 1.10.0 never
+receives a null address.
 
 The previous pin, tag `v1.9.0` (annotated tag object
 `3063adef6a81ead53ddf6ae2afc4d564ef6b3169`), commit

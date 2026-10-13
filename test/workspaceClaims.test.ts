@@ -261,6 +261,19 @@ test("an empty input issues an open claim, and its address reads back as null", 
   assert.equal(requests.length, 1);
 });
 
+test("list asks for open claims only when includeOpen is set", async () => {
+  const { client: daykeeper, requests } = client(() =>
+    Response.json({ data: { items: [] } }),
+  );
+  await daykeeper.workspaceClaims.list();
+  await daykeeper.workspaceClaims.list({ includeOpen: true });
+  await daykeeper.workspaceClaims.list({ includeOpen: false });
+  assert.deepEqual(
+    requests.map((request) => new URL(request.url).search),
+    ["", "?include=open", ""],
+  );
+});
+
 test("the local rule accepts real addresses up to the contract's 254", async () => {
   let calls = 0;
   const { client: daykeeper } = client(() => {

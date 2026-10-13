@@ -3,7 +3,7 @@
 ## Unreleased
 
 Generated from management contract `1.10.0` (`SkyPorch/daykeeper-openapi`
-branch `claude/open-workspace-claims`, commit `de5dc10`; not tagged yet).
+branch `claude/open-workspace-claims`, commit `7c7980c`; not tagged yet).
 Needs a server with migration 0119 (`SkyPorch/daykeeper`) for open claims.
 
 ### Added
@@ -13,6 +13,9 @@ Needs a server with migration 0119 (`SkyPorch/daykeeper`) for open claims.
   `WorkspaceClaim.email` is `string | null`: null while an open claim is
   pending or revoked, the accepting address once accepted. A null address or
   any other field in the input is still refused locally.
+- `workspaceClaims.list({ includeOpen: true })` also lists open claims nobody
+  accepted yet (sent as `?include=open`); without it the server leaves them
+  out, as it does for every client built before contract 1.10.0.
 
 ## 0.6.0
 
