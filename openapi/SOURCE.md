@@ -1,18 +1,26 @@
 # Contract source
 
 `daykeeper.yaml` is an exact, byte-for-byte copy of `openapi/daykeeper.yaml`
-from `SkyPorch/daykeeper-openapi` tag `v1.9.0` (annotated tag object
-`3063adef6a81ead53ddf6ae2afc4d564ef6b3169`), commit
-`316497e9d78ed084d96ab39482451d9cc13bbfc9` (contract `1.9.0`, the squash merge
-of `daykeeper-openapi` PR #42).
+from `SkyPorch/daykeeper-openapi` branch `claude/open-workspace-claims`,
+commit `de5dc104a64911fbbc5977d02714b9e2ad61576a` (contract `1.10.0`, the
+open workspace claims change). It is not tagged yet: re-vendor from the
+`v1.10.0` tag, and re-verify both hashes below, before releasing.
 
-- SHA-256: `ac0da6e342dc564a58a6a97eff0f4437d4b4d8bf0b6891b7ad4e0f500afa95db`
-- Git blob: `1792731b99e360e55dd965afa629403cac73b8df`
-
-The bytes are identical to the reviewed PR head `9886648` that this SDK was
-developed against; the SHA-256 and Git blob were re-verified against the tag.
+- SHA-256: `70eb116d49c5c010bcd48e5f1ff568f5e870476f050061197e9b6928f5c5118b`
+- Git blob: `7ae29f04d7b053cbc2f44db5d716d43c4c4ecc55`
 
 There is no local delta. This repository does not modify the vendored contract.
+
+`1.10.0` makes `CreateWorkspaceClaimInput.email` optional and
+`WorkspaceClaim.email` `string | null`. A create without an address issues an
+open claim: a single-use link any signed-in person with a verified email may
+accept once, becoming an owner. Its address is null until it is accepted and
+the accepting address afterwards.
+
+The previous pin, tag `v1.9.0` (annotated tag object
+`3063adef6a81ead53ddf6ae2afc4d564ef6b3169`), commit
+`316497e9d78ed084d96ab39482451d9cc13bbfc9` (contract `1.9.0`, the squash merge
+of `daykeeper-openapi` PR #42):
 
 `1.9.0` documents the Daykeeper Dashboard management API: `GET /v1/profile`
 and `GET /v1/workspaces` (human OAuth, `daykeeper.accounts:read`); `GET` and

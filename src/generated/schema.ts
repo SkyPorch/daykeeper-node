@@ -1286,6 +1286,16 @@ export interface paths {
          *     constrained to true. Neither status ever carries the other's shape, so a
          *     client may narrow on the status code alone.
          *
+         *     Since 1.10.0 the address is optional. A request without `email` issues
+         *     an open claim: a single-use link that any signed-in person with a
+         *     verified email who is not already a member may accept once, becoming an
+         *     owner. Its `claim.email` is null while it is pending or revoked and the
+         *     accepting address once accepted. One pending open claim exists per
+         *     organization; it is never emailed (`emailed`, where present, is false),
+         *     and an exact repeat of an open claim's key after it was accepted answers
+         *     200 with that accepted claim. Prefer an address whenever the caller
+         *     knows it: an open link is a bearer secret for owner access.
+         *
          *     One pending claim exists per email per organization. A different intent
          *     for the same address while a claim is pending is rejected with
          *     INVITATION_ALREADY_PENDING (409); an address that already holds a
@@ -2389,7 +2399,8 @@ export interface components {
         /**
          * @description An owner invitation issued by a machine owner. It reuses the existing
          *     invitation lifecycle: single use, email-match on acceptance, and a
-         *     bounded expiry. Accepting it never demotes the machine owner.
+         *     bounded expiry. Accepting it never demotes the machine owner. An open
+         *     claim (1.10.0) has no address to match; see `email`.
          */
         WorkspaceClaim: {
             /** Format: uuid */
@@ -2399,8 +2410,15 @@ export interface components {
              * @description Organization derived from the authenticated machine owner.
              */
             organizationId: string;
-            /** @description Lowercased address that must sign in to accept this claim. */
-            email: string;
+            /**
+             * @description Lowercased address that must sign in to accept this claim. For an
+             *     open claim (created without an address, 1.10.0) it is null while
+             *     the claim is pending or revoked, and the verified address that
+             *     accepted it once accepted. Only a claim created by a 1.10.0 client
+             *     is ever open, so a workspace whose clients predate 1.10.0 never
+             *     reports null here.
+             */
+            email: string | null;
             /** @constant */
             role: "owner";
             /**
@@ -2428,6 +2446,11 @@ export interface components {
              */
             revokedAt: string | null;
         };
+        /**
+         * @description With `email`, a claim only that address can accept. Without it
+         *     (1.10.0), an open claim: a single-use link any signed-in person with a
+         *     verified email may accept once.
+         */
         CreateWorkspaceClaimInput: {
             /**
              * @description Lowercased address that must accept the claim. The local part is one
@@ -2437,11 +2460,12 @@ export interface components {
              *     dots, and at least one dot is required. Uppercase is rejected rather
              *     than folded so the stored address matches the one that signs in.
              *     The caller delivers the returned claim URL; an installation may also
-             *     email it to this address (see `emailed` on the result).
+             *     email it to this address (see `emailed` on the result). Omit it to
+             *     issue an open claim.
              * @example gabriel@acme.com
              * @example gabriel+claims@mail.acme.co.uk
              */
-            email: string;
+            email?: string;
         };
         /**
          * @description The result of a fresh application: the claim, its single-use token, and

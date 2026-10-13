@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+Generated from management contract `1.10.0` (`SkyPorch/daykeeper-openapi`
+branch `claude/open-workspace-claims`, commit `de5dc10`; not tagged yet).
+Needs a server with migration 0119 (`SkyPorch/daykeeper`) for open claims.
+
+### Added
+
+- `workspaceClaims.create({}, { idempotencyKey })` issues an open claim: a
+  single-use link any signed-in person may accept once, becoming an owner.
+  `WorkspaceClaim.email` is `string | null`: null while an open claim is
+  pending or revoked, the accepting address once accepted. A null address or
+  any other field in the input is still refused locally.
+
 ## 0.6.0
 
 Generated from management contract `1.9.0`, tag `v1.9.0`, commit
