@@ -1,12 +1,12 @@
 # Contract source
 
 `daykeeper.yaml` is an exact, byte-for-byte copy of `openapi/daykeeper.yaml`
-from `SkyPorch/daykeeper-openapi`, commit `45da401f870643182a0fd65236e2125da05c406c`.
+from `SkyPorch/daykeeper-openapi`, commit `19e9258b63de2499de9e27d4bbff814818c71998`.
 This is an unreleased commit snapshot implementing optional host-app contact
 technical context on top of contract 1.10.0. No tag or release is claimed.
 
-- SHA-256: `51f727f0885fb9d53f6bb73e9403054c3073c147e54d23ea2f5d5149d33f8f74`
-- Git blob: `e8712e86365773e13c08f44f4abff332581bdfe6`
+- SHA-256: `c58803c778bb950a372aee6672e59ba7a31e3914f7706418349d744d6120ece0`
+- Git blob: `d15773aa3bf22628d669cfd1b77334a872af77b8`
 
 The previous released SDK baseline was contract v1.9.0, commit
 `316497e9d78ed084d96ab39482451d9cc13bbfc9`. This snapshot also retains the

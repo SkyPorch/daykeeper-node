@@ -1919,7 +1919,7 @@ export interface components {
              */
             paymentProvider?: "stripe" | "apple_iap" | "android_iap" | "none";
             /**
-             * @description Optional host-app platform for customer sessions only. Omit when unknown.
+             * @description Optional host-app platform for customer sessions only. Omit when unknown. The most recent known value observed by the gateway replaces this field; omitted fields retain their previous values across devices.
              * @enum {string}
              */
             platform?: "ios" | "android" | "web";
