@@ -525,3 +525,50 @@ test("uses stable encoded flow paths and version numbers", async () => {
     "https://api.daykeeper.example/v1/flows/flow%2Fone/versions/2/publish",
   ]);
 });
+
+test("customer sessions carry typed host-app context without inventing SDK or device values", async () => {
+  const bodies: Record<string, unknown>[] = [];
+  const client = new DaykeeperClient({
+    baseUrl: "https://api.example.test",
+    token: "synthetic-token",
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      assert.equal(
+        new URL(request.url).pathname,
+        "/v1/tenants/10000000-0000-4000-8000-000000000001/customer-sessions",
+      );
+      bodies.push((await request.json()) as Record<string, unknown>);
+      return Response.json({
+        data: {
+          token: "synthetic-session",
+          tokenType: "Bearer",
+          purpose: "customer",
+          expiresAt: "2026-10-14T12:05:00Z",
+        },
+      });
+    },
+  });
+  const input: import("../src/types.ts").CreateCustomerSessionInput = {
+    purpose: "customer",
+    subject: "example-user",
+    platform: "ios",
+    deviceBrand: "Example",
+    deviceModel: "Example Phone",
+    osName: "iOS",
+    osVersion: "26",
+    appVersion: "2.3.0",
+    appBuild: "230",
+  };
+  await client.customerSessions.create(
+    "10000000-0000-4000-8000-000000000001",
+    input,
+  );
+  await client.customerSessions.create("10000000-0000-4000-8000-000000000001", {
+    purpose: "customer",
+    subject: "example-user",
+  });
+  assert.deepEqual(bodies, [
+    input,
+    { purpose: "customer", subject: "example-user" },
+  ]);
+});

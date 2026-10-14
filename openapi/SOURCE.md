@@ -1,13 +1,31 @@
 # Contract source
 
 `daykeeper.yaml` is an exact, byte-for-byte copy of `openapi/daykeeper.yaml`
+from `SkyPorch/daykeeper-openapi`, commit `19e9258b63de2499de9e27d4bbff814818c71998`.
+This is an unreleased commit snapshot implementing optional host-app contact
+technical context on top of contract 1.10.0. No tag or release is claimed.
+
+- SHA-256: `c58803c778bb950a372aee6672e59ba7a31e3914f7706418349d744d6120ece0`
+- Git blob: `d15773aa3bf22628d669cfd1b77334a872af77b8`
+
+The previous released SDK baseline was contract v1.9.0, commit
+`316497e9d78ed084d96ab39482451d9cc13bbfc9`. This snapshot also retains the
+additive optional web-client display name from contract 1.10.0.
+There is no local delta to the vendored contract. Apache-2.0 metadata is retained.
+Before publishing, replace this snapshot with a reviewed immutable contract tag
+and full commit SHA, and verify both checksums. No SDK package is published by
+this change.
+
+# Previous released baseline
+
+`daykeeper.yaml` is an exact, byte-for-byte copy of `openapi/daykeeper.yaml`
 from `SkyPorch/daykeeper-openapi` tag `v1.9.0` (annotated tag object
 `3063adef6a81ead53ddf6ae2afc4d564ef6b3169`), commit
 `316497e9d78ed084d96ab39482451d9cc13bbfc9` (contract `1.9.0`, the squash merge
 of `daykeeper-openapi` PR #42).
 
-- SHA-256: `ac0da6e342dc564a58a6a97eff0f4437d4b4d8bf0b6891b7ad4e0f500afa95db`
-- Git blob: `1792731b99e360e55dd965afa629403cac73b8df`
+- Previous SHA-256: `ac0da6e342dc564a58a6a97eff0f4437d4b4d8bf0b6891b7ad4e0f500afa95db`
+- Previous Git blob: `1792731b99e360e55dd965afa629403cac73b8df`
 
 The bytes are identical to the reviewed PR head `9886648` that this SDK was
 developed against; the SHA-256 and Git blob were re-verified against the tag.
