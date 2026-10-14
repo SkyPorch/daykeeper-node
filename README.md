@@ -527,3 +527,34 @@ generated from the vendored Daykeeper OpenAPI commit recorded in
 [`openapi/SOURCE.md`](openapi/SOURCE.md); the SDK-to-contract mapping is in
 [`COMPATIBILITY.md`](COMPATIBILITY.md). Releases use the protected,
 provenance-producing process in [`RELEASING.md`](RELEASING.md).
+
+### Contact device and host-app context
+
+Your authenticated backend can pass optional technical context when creating a
+customer session. The browser/native messenger SDK consumes the signed token;
+it does not infer these values or need new methods.
+
+```ts
+await daykeeper.customerSessions.create(tenantId, {
+  purpose: "customer",
+  subject: user.id,
+  platform: "ios", // ios | android | web
+  osName: "iOS",
+  osVersion: "26",
+  appVersion: "2.3.0", // Your host application's version, not this SDK's
+  appBuild: "230", // Your host application's build
+});
+```
+
+Optional `deviceBrand` and `deviceModel` accept non-identifying manufacturer/model
+names. Omit unknown fields; strings must be nonempty after trimming and at most
+200 characters. These fields are customer presentation context, not permissions,
+and are not included in lifecycle or erasure tokens. Daykeeper's gateway stores
+the latest known value it observes per field; missing fields preserve earlier
+observations across devices. This is not a coherent device snapshot or inventory.
+Supply all known fields together. Polling unread/seen does not refresh device
+context. App version/build must never be substituted with SDK version/build.
+
+This source uses an unreleased contract snapshot; release maintainers must pin
+its reviewed immutable contract tag before publishing. No runtime platform
+detection, browser fingerprinting, location collection, or device IDs are added.

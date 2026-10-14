@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Add typed optional OS, host-app version/build, platform and device model/brand
+  fields to customer sessions. Unknown fields remain omitted; SDK versions are
+  never substituted for host-app versions.
+- Pin the linked unreleased contract snapshot; no package release is performed.
+
 ## 0.6.0
 
 Generated from management contract `1.9.0`, tag `v1.9.0`, commit
