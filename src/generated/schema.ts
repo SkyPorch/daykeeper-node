@@ -525,7 +525,8 @@ export interface paths {
          *     being deleted.
          *
          *     The body replaces the whole setting: an omitted `greeting` or
-         *     `accentColor` is cleared, not kept. The first successful PUT for a
+         *     `accentColor` is cleared, not kept. `displayName` is the exception:
+         *     omitted, it is kept; `null` clears it. The first successful PUT for a
          *     tenant mints its publishable key and answers 201; later PUTs answer
          *     200 and keep the key (use the rotate operation to change it). A PUT
          *     that changes nothing leaves `version` as it was.
@@ -1252,9 +1253,9 @@ export interface paths {
          *     organization comes only from the verified machine owner; no
          *     organization or pagination selector is accepted.
          *
-         *     Open claims nobody has accepted yet (1.10.0) have no address. They
+         *     Open claims nobody has accepted yet (1.12.0) have no address. They
          *     are listed only when the request asks with `include=open`, so a client
-         *     generated before 1.10.0, which expects every listed claim to carry an
+         *     generated before 1.12.0, which expects every listed claim to carry an
          *     address, never receives one. An accepted open claim carries the
          *     accepting address and is always listed.
          *
@@ -1292,7 +1293,7 @@ export interface paths {
          *     constrained to true. Neither status ever carries the other's shape, so a
          *     client may narrow on the status code alone.
          *
-         *     Since 1.10.0 the address is optional. A request without `email` issues
+         *     Since 1.12.0 the address is optional. A request without `email` issues
          *     an open claim: a single-use link that any signed-in person with a
          *     verified email who is not already a member may accept once, becoming an
          *     owner. Its `claim.email` is null while it is pending or revoked and the
@@ -1933,6 +1934,23 @@ export interface components {
              * @enum {string}
              */
             paymentProvider?: "stripe" | "apple_iap" | "android_iap" | "none";
+            /**
+             * @description Optional host-app platform for customer sessions only. Omit when unknown. The most recent known value observed by the gateway replaces this field; omitted fields retain their previous values across devices.
+             * @enum {string}
+             */
+            platform?: "ios" | "android" | "web";
+            /** @description Device manufacturer reported by the host app; never a unique device identifier. Customer sessions only; omit when unknown. The most recent known value observed by the gateway replaces this field; omitted fields retain their previous values across devices. */
+            deviceBrand?: string;
+            /** @description Device model reported by the host app; never a unique device identifier. Customer sessions only; omit when unknown. The most recent known value observed by the gateway replaces this field; omitted fields retain their previous values across devices. */
+            deviceModel?: string;
+            /** @description Operating system name reported by the host app, such as iOS or Android. Customer sessions only; omit when unknown. The most recent known value observed by the gateway replaces this field; omitted fields retain their previous values across devices. */
+            osName?: string;
+            /** @description Operating system version reported by the host app. Customer sessions only; omit when unknown. The most recent known value observed by the gateway replaces this field; omitted fields retain their previous values across devices. */
+            osVersion?: string;
+            /** @description Host application version, not the Daykeeper SDK version. Customer sessions only; omit when unknown. The most recent known value observed by the gateway replaces this field; omitted fields retain their previous values across devices. */
+            appVersion?: string;
+            /** @description Host application build number or label, not the Daykeeper SDK build. Customer sessions only; omit when unknown. The most recent known value observed by the gateway replaces this field; omitted fields retain their previous values across devices. */
+            appBuild?: string;
             /** @description Required only for the erasure purpose. */
             erasureTargetHash?: string;
         };
@@ -2406,7 +2424,7 @@ export interface components {
          * @description An owner invitation issued by a machine owner. It reuses the existing
          *     invitation lifecycle: single use, email-match on acceptance, and a
          *     bounded expiry. Accepting it never demotes the machine owner. An open
-         *     claim (1.10.0) has no address to match; see `email`.
+         *     claim (1.12.0) has no address to match; see `email`.
          */
         WorkspaceClaim: {
             /** Format: uuid */
@@ -2418,12 +2436,12 @@ export interface components {
             organizationId: string;
             /**
              * @description Lowercased address that must sign in to accept this claim. For an
-             *     open claim (created without an address, 1.10.0) it is null while
+             *     open claim (created without an address, 1.12.0) it is null while
              *     the claim is pending or revoked, and the verified address that
-             *     accepted it once accepted. Null is only ever returned to a 1.10.0
+             *     accepted it once accepted. Null is only ever returned to a 1.12.0
              *     client: in the create result for an open claim, in a revoke of one
              *     (whose id only that client holds), and in a list requested with
-             *     `include=open`. A client generated before 1.10.0 never receives
+             *     `include=open`. A client generated before 1.12.0 never receives
              *     it.
              */
             email: string | null;
@@ -2456,7 +2474,7 @@ export interface components {
         };
         /**
          * @description With `email`, a claim only that address can accept. Without it
-         *     (1.10.0), an open claim: a single-use link any signed-in person with a
+         *     (1.12.0), an open claim: a single-use link any signed-in person with a
          *     verified email may accept once.
          */
         CreateWorkspaceClaimInput: {
@@ -2619,6 +2637,14 @@ export interface components {
             greeting: string | null;
             /** @description Lowercase `#rrggbb`, or null for the default. */
             accentColor: string | null;
+            /**
+             * @description The name the messenger shows customers in its header, or null to
+             *     show the tenant's name. New in 1.10.0. Servers from 1.10.0 always
+             *     send it, null when unset; it is not required here only because
+             *     earlier servers omit it. Its presence is how a client knows the
+             *     server accepts `displayName` on PUT.
+             */
+            displayName?: string | null;
             /** @description True when `state` is enabled and the tenant's API inbox is live for customer traffic. */
             trafficEnabled: boolean;
             /**
@@ -2633,7 +2659,10 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /** @description The whole web messenger setting. Omitted optional fields are cleared. */
+        /**
+         * @description The whole web messenger setting. An omitted `greeting` or `accentColor`
+         *     is cleared; an omitted `displayName` is kept (send `null` to clear it).
+         */
         WebClientInput: {
             /**
              * @description Disabled keeps the settings and key but turns the messenger off.
@@ -2657,6 +2686,21 @@ export interface components {
             greeting?: string;
             /** @description A `#rrggbb` hex color, stored lowercase. */
             accentColor?: string;
+            /**
+             * @description The name customers see in the messenger's header, like "Warlord
+             *     Cards". A string sets it: 1 to 60 characters, already trimmed, with
+             *     no control characters. `null` clears it, so the messenger shows the
+             *     tenant's name. Unlike `greeting` and `accentColor`, an omitted
+             *     `displayName` is kept, so a writer built against an earlier
+             *     contract never clears a name it does not know about. Servers before
+             *     1.10.0 reject the field, so send it only when the GET response
+             *     carries `displayName`. Before the first PUT there is nothing to GET
+             *     (404); to create a web client with a name against a server of
+             *     unknown version, create it without `displayName`, then PUT again
+             *     with it once the response carries the field. Messengers show it as
+             *     plain text.
+             */
+            displayName?: string | null;
         };
         RotateWebClientPublishableKeyInput: {
             /** @description How long the previous key keeps working. 0 stops it at once; at most 604800 (seven days). */
@@ -3674,7 +3718,7 @@ export interface operations {
                     "application/json": components["schemas"]["WebClientResponse"];
                 };
             };
-            /** @description The body, an origin, the greeting or the accent color is invalid, or the If-Match / If-None-Match headers are malformed or sent together (INVALID_INPUT). */
+            /** @description The body, an origin, the greeting, the accent color or the display name is invalid, or the If-Match / If-None-Match headers are malformed or sent together (INVALID_INPUT). */
             400: components["responses"]["Error"];
             401: components["responses"]["Error"];
             /** @description The credential lacks daykeeper.accounts:write (SCOPE_REQUIRED). */
@@ -4711,7 +4755,7 @@ export interface operations {
             query?: {
                 /**
                  * @description `open` also lists open claims nobody has accepted yet, whose
-                 *     `email` is null (1.10.0). Any other value is rejected.
+                 *     `email` is null (1.12.0). Any other value is rejected.
                  */
                 include?: "open";
             };

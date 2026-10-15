@@ -2,22 +2,27 @@
 
 `daykeeper.yaml` is an exact, byte-for-byte copy of `openapi/daykeeper.yaml`
 from `SkyPorch/daykeeper-openapi` branch `claude/open-workspace-claims`,
-commit `7c7980cd02b5c8b9f6d6bc84a693435746a41998` (contract `1.10.0`, the
-open workspace claims change). It is not tagged yet: re-vendor from the
-`v1.10.0` tag, and re-verify both hashes below, before releasing.
+commit `47c27ae` (contract `1.12.0`, the open workspace claims change merged
+over upstream main). It is not tagged yet: re-vendor from the `v1.12.0` tag,
+and re-verify both hashes below, before releasing.
 
-- SHA-256: `41635e36b236e8f816332bde5eb6987a30783a7312e32a08b536128b15c327d4`
-- Git blob: `c5343c152528a6c78593246ce3a98973a94758e3`
+- SHA-256: `c7b1ca7f88c384211293bf56b4b377e6a6a0fdec687fd4925f45c6213639474f`
+- Git blob: `2e979c01e9885e4ed2aad615593571b45ae13603`
 
 There is no local delta. This repository does not modify the vendored contract.
 
-`1.10.0` makes `CreateWorkspaceClaimInput.email` optional and
+`1.12.0` makes `CreateWorkspaceClaimInput.email` optional and
 `WorkspaceClaim.email` `string | null`. A create without an address issues an
 open claim: a single-use link any signed-in person with a verified email may
 accept once, becoming an owner. Its address is null until it is accepted and
 the accepting address afterwards. `GET /v1/workspace-claims` lists open claims
-nobody accepted only with `include=open`, so a client from before 1.10.0 never
+nobody accepted only with `include=open`, so a client from before 1.12.0 never
 receives a null address.
+
+It also carries two upstream changes this SDK does not wrap: `1.10.0`, an
+optional `displayName` on the web messenger setting (kept when omitted, cleared
+with `null`), and `1.11.0`, optional host-app technical context (platform,
+device, OS and app version) on customer sessions.
 
 The previous pin, tag `v1.9.0` (annotated tag object
 `3063adef6a81ead53ddf6ae2afc4d564ef6b3169`), commit

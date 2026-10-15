@@ -2,9 +2,12 @@
 
 ## Unreleased
 
-Generated from management contract `1.10.0` (`SkyPorch/daykeeper-openapi`
-branch `claude/open-workspace-claims`, commit `7c7980c`; not tagged yet).
-Needs a server with migration 0119 (`SkyPorch/daykeeper`) for open claims.
+Generated from management contract `1.12.0` (`SkyPorch/daykeeper-openapi`
+branch `claude/open-workspace-claims`, commit `47c27ae`; not tagged yet).
+Needs a server with migration 0122 (`SkyPorch/daykeeper`) for open claims.
+The regenerated types also carry contract 1.10.0 (web messenger
+`displayName`) and 1.11.0 (host-app context on customer sessions), which no
+SDK method wraps.
 
 ### Added
 
@@ -15,7 +18,7 @@ Needs a server with migration 0119 (`SkyPorch/daykeeper`) for open claims.
   any other field in the input is still refused locally.
 - `workspaceClaims.list({ includeOpen: true })` also lists open claims nobody
   accepted yet (sent as `?include=open`); without it the server leaves them
-  out, as it does for every client built before contract 1.10.0.
+  out, as it does for every client built before contract 1.12.0.
 
 ## 0.6.0
 
