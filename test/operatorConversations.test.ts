@@ -5,10 +5,12 @@ import { DaykeeperClient } from "../src/client.ts";
 const list = {
   tenantId: "tenant-1",
   conversations: [{ id: 42, status: "open", preview: "Hello" }],
+  page: { limit: 50, nextCursor: null, hasMore: false },
 };
 const messages = {
   tenantId: "tenant-1",
   conversationId: 42,
+  page: { limit: 50, nextCursor: null, hasMore: false },
   messages: [
     {
       id: 7,
@@ -19,6 +21,11 @@ const messages = {
       createdAt: "2026-09-07T00:00:00Z",
     },
   ],
+};
+const conversation = {
+  tenantId: "tenant-1",
+  conversationId: 42,
+  conversation: { id: 42, status: "open", preview: "Hello" },
 };
 
 test("operator conversation methods use tenant-qualified paths and envelopes", async () => {
@@ -41,9 +48,18 @@ test("operator conversation methods use tenant-qualified paths and envelopes", a
                 content: "Reply",
               },
             }
-          : request.url.endsWith("/messages")
-            ? messages
-            : list;
+          : request.method === "PATCH"
+            ? {
+                tenantId: "tenant-1",
+                conversationId: 42,
+                conversation: { id: 42, status: "resolved", preview: "Hello" },
+              }
+            : request.method === "GET" &&
+                request.url.endsWith("/conversations/42")
+              ? conversation
+              : request.url.endsWith("/messages")
+                ? messages
+                : list;
       return Response.json(
         { data: body },
         { status: request.method === "POST" ? 201 : 200 },
@@ -52,6 +68,10 @@ test("operator conversation methods use tenant-qualified paths and envelopes", a
   });
 
   assert.deepEqual(await client.operatorConversations.list("tenant-1"), list);
+  assert.deepEqual(
+    await client.operatorConversations.get("tenant-1", 42),
+    conversation,
+  );
   assert.deepEqual(
     await client.operatorConversations.messages("tenant-1", 42),
     messages,
@@ -70,15 +90,78 @@ test("operator conversation methods use tenant-qualified paths and envelopes", a
     },
   );
   assert.deepEqual(
+    await client.operatorConversations.setStatus("tenant-1", 42, {
+      status: "resolved",
+    }),
+    {
+      tenantId: "tenant-1",
+      conversationId: 42,
+      conversation: { id: 42, status: "resolved", preview: "Hello" },
+    },
+  );
+  assert.deepEqual(
     requests.map((request) => [request.method, new URL(request.url).pathname]),
     [
       ["GET", "/v1/tenants/tenant-1/conversations"],
+      ["GET", "/v1/tenants/tenant-1/conversations/42"],
       ["GET", "/v1/tenants/tenant-1/conversations/42/messages"],
       ["POST", "/v1/tenants/tenant-1/conversations/42/messages"],
+      ["PATCH", "/v1/tenants/tenant-1/conversations/42"],
     ],
   );
-  assert.deepEqual(await requests[2].clone().json(), { content: "Reply" });
-  assert.equal(requests[2].headers.get("idempotency-key"), null);
+  assert.deepEqual(await requests[3].clone().json(), { content: "Reply" });
+  assert.equal(requests[3].headers.get("idempotency-key"), null);
+  assert.deepEqual(await requests[4].clone().json(), { status: "resolved" });
+});
+
+test("operator conversation paging and reply request ids map to query and header", async () => {
+  const requests: Request[] = [];
+  const client = new DaykeeperClient({
+    baseUrl: "https://api.example.com",
+    token: "workspace-token",
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      requests.push(request);
+      const body =
+        request.method === "POST"
+          ? {
+              tenantId: "tenant-1",
+              conversationId: 42,
+              message: messages.messages[0],
+            }
+          : request.url.endsWith("/messages")
+            ? messages
+            : list;
+      return Response.json({ data: body }, { status: 200 });
+    },
+  });
+
+  await client.operatorConversations.list("tenant-1", {
+    cursor: "list-cursor",
+    limit: 25,
+  });
+  await client.operatorConversations.messages("tenant-1", 42, {
+    cursor: "older-cursor",
+    limit: 40,
+  });
+  await client.operatorConversations.reply("tenant-1", 42, "Reply", {
+    requestId: "00000000-0000-4000-8000-000000000001",
+  });
+
+  assert.equal(
+    new URL(requests[0].url).searchParams.get("cursor"),
+    "list-cursor",
+  );
+  assert.equal(new URL(requests[0].url).searchParams.get("limit"), "25");
+  assert.equal(
+    new URL(requests[1].url).searchParams.get("cursor"),
+    "older-cursor",
+  );
+  assert.equal(new URL(requests[1].url).searchParams.get("limit"), "40");
+  assert.equal(
+    requests[2].headers.get("idempotency-key"),
+    "00000000-0000-4000-8000-000000000001",
+  );
 });
 
 test("operator replies never retry an uncertain POST", async () => {
@@ -154,5 +237,81 @@ test("operator conversation inputs fail before transport", async () => {
     () => client.operatorConversations.reply("tenant", 1, "   "),
     { code: "INVALID_CONFIGURATION" },
   );
+  // Paging bounds match the server (contract 1.9.0): limit 1-100 on both
+  // lists, cursor at most 256 characters.
+  for (const options of [
+    { limit: 0 },
+    { limit: 101 },
+    { limit: 1.5 },
+    { cursor: "" },
+    { cursor: "c".repeat(257) },
+    { cursor: "line\nbreak" },
+  ]) {
+    await assert.rejects(
+      () => client.operatorConversations.list("tenant", options),
+      { code: "INVALID_CONFIGURATION" },
+      JSON.stringify(options),
+    );
+    await assert.rejects(
+      () => client.operatorConversations.messages("tenant", 1, options),
+      { code: "INVALID_CONFIGURATION" },
+      JSON.stringify(options),
+    );
+  }
+  await assert.rejects(() => client.operatorConversations.get("tenant", 0), {
+    code: "INVALID_CONFIGURATION",
+  });
+  await assert.rejects(
+    () =>
+      client.operatorConversations.setStatus("tenant", 1, {
+        status: "pending" as "open",
+      }),
+    { code: "INVALID_CONFIGURATION" },
+  );
+  await assert.rejects(
+    () =>
+      client.operatorConversations.reply("tenant", 1, "Reply", {
+        requestId: "not-a-uuid",
+      }),
+    { code: "INVALID_CONFIGURATION" },
+  );
   assert.equal(calls, 0);
+});
+
+test("operator lists accept the server bounds and older servers without page", async () => {
+  const requests: Request[] = [];
+  const client = new DaykeeperClient({
+    baseUrl: "https://api.example.com",
+    apiKey: "operator-key",
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      requests.push(request);
+      // A server before contract 1.9.0 ignores paging and omits `page`.
+      return Response.json({
+        data: request.url.includes("/messages")
+          ? {
+              tenantId: "tenant-1",
+              conversationId: 42,
+              messages: messages.messages,
+            }
+          : { tenantId: "tenant-1", conversations: list.conversations },
+      });
+    },
+  });
+  const cursor = "c".repeat(256);
+  const page = await client.operatorConversations.list("tenant-1", {
+    limit: 100,
+    cursor,
+  });
+  assert.equal(page.page, undefined);
+  const history = await client.operatorConversations.messages("tenant-1", 42, {
+    limit: 100,
+  });
+  assert.equal(history.page, undefined);
+  assert.equal(new URL(requests[0].url).searchParams.get("limit"), "100");
+  assert.equal(new URL(requests[0].url).searchParams.get("cursor"), cursor);
+  assert.equal(new URL(requests[1].url).searchParams.get("limit"), "100");
+  // No paging options sends no query at all, exactly as before 0.6.0.
+  await client.operatorConversations.list("tenant-1");
+  assert.equal(new URL(requests[2].url).search, "");
 });

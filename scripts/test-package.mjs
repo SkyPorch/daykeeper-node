@@ -117,7 +117,7 @@ try {
       assert.deepEqual(Object.keys(client.inboxes), ['get']);
       assert.deepEqual(Object.keys(client.websiteChannels), ['get']);
       assert.deepEqual(Object.keys(client.usage), ['get']);
-      assert.deepEqual(Object.keys(client.agentCredentials), ['list', 'create', 'revoke']);
+      assert.deepEqual(Object.keys(client.agentCredentials), ['list', 'create', 'revoke', 'rotate']);
       const domainCalls = [];
       const domain = new Client({ baseUrl: 'https://api.example.test', token: async ({forceRefresh}) => { domainCalls.push('token:' + forceRefresh); return 'token'; }, fetch: async (input, init) => {
         domainCalls.push(init.method + ':' + new URL(input).pathname);

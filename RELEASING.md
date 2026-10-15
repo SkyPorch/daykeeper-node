@@ -40,12 +40,9 @@ verified with the post-publish check in step 7 below.
    unmerged pull request head is not acceptable in a release. Re-vendor the
    contract from the tag and re-run `pnpm check:generated`.
 
-   > Today `openapi/SOURCE.md` points at commit
-   > `16f1ba8f59699e27c804947fd5d5cca88edd1143`, the head of the unmerged
-   > `daykeeper-openapi` PR #15. It is labelled there as an unreleased commit
-   > snapshot, which is honest but **not releasable**. Shipping 0.2.0 requires
-   > that PR to merge, a `daykeeper-openapi` tag to exist, and this file to be
-   > updated to that tag. No such tag exists yet; do not invent one.
+   The published 0.2.0 release records contract tag `v1.1.0`. For subsequent
+   releases, verify the new tag and commit directly rather than relying on a
+   candidate PR description. The checksum tests also verify the vendored bytes.
 
 3. **Finalize the changelog.** The section for the version being released must
    carry the real version heading with no `unreleased` marker left anywhere in

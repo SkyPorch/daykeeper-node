@@ -1,6 +1,170 @@
 # Changelog
 
-## 0.2.0 (unreleased)
+## 0.6.0
+
+Generated from management contract `1.9.0`, tag `v1.9.0`, commit
+`316497e9d78ed084d96ab39482451d9cc13bbfc9`. Requires a server implementing
+1.9.0 for the new methods (`SkyPorch/daykeeper` #313); every 0.5.0 method is
+unchanged. No breaking changes: the new result fields and request options are
+optional.
+
+### Added
+
+- `profile.get()` and `workspaces.list()` read the person and workspace bound
+  to the supplied OAuth access token. Neither accepts a workspace selector.
+  `Workspace.role` is optional.
+- `customerEmail.get(tenantId)` and `customerEmail.set(tenantId, { enabled })`.
+  Members can read; only a human owner can write.
+- `operatorConversations.get(tenantId, conversationId)` reads one conversation.
+- `operatorConversations.setStatus(tenantId, conversationId, { status })` with
+  `open` and `resolved`.
+- `cursor` and `limit` options on `operatorConversations.list` and
+  `operatorConversations.messages` (limit 1-100, cursor at most 256
+  characters, validated before any request). Pagination is opt-in: a result
+  carries `page` (`limit`, `nextCursor`, `hasMore`) only when `limit` or
+  `cursor` was passed; servers before contract 1.9.0 never send it.
+  Message pages begin with the latest messages in chronological order. Calls
+  without these options send no query string, as before.
+- Optional `requestId` (UUID v4) on `operatorConversations.reply`, sent as
+  `Idempotency-Key`. Reuse it to repeat an uncertain reply and receive the
+  original message. Omitting it keeps the previous behavior.
+
+## 0.5.0
+
+### Breaking
+
+- `CreateAgentCredentialInput` is a discriminated union. A key with `tenantId`
+  may carry only `daykeeper.customer-sessions:write`, `daykeeper.lifecycle:write`
+  and `daykeeper.customers:delete`; a key without it may not carry the last
+  two. Code that passes `tenantId` with any other scope no longer compiles.
+  `AgentCredentialScope` now includes the two tenant-only scopes, so a `scopes`
+  variable typed `AgentCredentialScope[]` no longer compiles either. Type it as
+  `OrganizationAgentCredentialScope[]` or `TenantAgentCredentialScope[]`.
+  Nothing changes at runtime.
+
+### Added
+
+- Add `agentCredentials.rotate(credentialId, { overlapHours?, validityDays? },
+{ idempotencyKey })`. It replaces a key's secret and keeps its name, scopes
+  and tenant restriction; the result carries the new `credential`, the
+  `previousCredential` and the new `token`, revealed once. The previous key
+  keeps working for `overlapHours` (default 24, at most 168; 0 revokes it at
+  once). A workspace owner can rotate any key, and a server key can rotate
+  itself, which is how a long-running agent replaces a key that is about to
+  expire. `validityDays` omitted keeps the rotated key's policy; a key
+  rotating itself never gets a later expiry than it had. Revoking a key also
+  revokes the keys it rotated itself into. The idempotency key is required:
+  after an uncertain response, repeat the call with the same key and input; if
+  that replay returns `token: null`, a key that rotated itself may call again
+  with a new idempotency key while it still works, which supersedes the unused
+  successor.
+- `AgentCredential` gains optional `rotatedFromId`, `replacedById` and
+  `replacedAt`; `capabilities.agentCredentials.rotation` reports whether the
+  server can rotate.
+- A server replying to a request made with a key that expires within 14 days
+  sets the `Daykeeper-Credential-Expires-At` response header.
+- A key rotating itself must pass `overlapHours` of at least 1: 0 revokes the
+  caller at once, so a lost response leaves it no way to recover, and a server
+  may reject it with `INVALID_INPUT`.
+- `CreateAgentCredentialInput` is a discriminated union: an organization-wide
+  key takes `OrganizationAgentCredentialScope`s, and a key with `tenantId`
+  takes `TenantAgentCredentialScope`s (customer sessions, lifecycle, customer
+  deletion). A lifecycle or erasure scope without `tenantId`, or an account
+  scope with it, is now a type error as well as a server rejection.
+- `AgentCredential.tenantId` is optional, because servers before tenant-scoped
+  keys omit it. Treat absent as organization-wide. Agent credential response
+  types accept fields a later contract minor version adds.
+- Requires a server with agent credential rotation (`SkyPorch/daykeeper`
+  migration 0105); an older server answers the rotate call with 404. Vendors
+  contract `1.6.0`, tag `v1.6.0`, commit
+  `f563df6fffca80d7d2c634e270604b6e61561152`.
+
+## 0.4.0
+
+### Breaking
+
+- `AgentCredential.expiresAt` is now `string | null`. TypeScript code that
+  passes it straight to `new Date()` needs a null check. Nothing changes at
+  runtime for a credential that has an expiry.
+
+### Changed
+
+- Agent credentials last until they are revoked by default. `validityDays` on
+  `agentCredentials.create` is now `number | null`, from 1 through 365; omitted
+  or `null` issues a credential with no expiry. `AgentCredential.expiresAt` is
+  now `string | null`, and is `null` for such a credential, so code that passes
+  it straight to `new Date()` needs a null check. The previous default was 30
+  days with a maximum of 90, which stopped a server key in a deployment's
+  environment a month after it was created. Requires a server with
+  `SkyPorch/daykeeper` PR #217; an older server rejects `validityDays: null`
+  and values over 90, and still applies its 30-day default when the field is
+  omitted. Vendors contract `1.4.0`.
+
+## 0.3.0
+
+Published by hand on 2026-09-10, with no provenance attestation.
+
+- Add the `workspaceClaims` namespace, so an agent that created a workspace can
+  hand it to a person as owner: `workspaceClaims.create({ email }, { idempotencyKey })`,
+  `workspaceClaims.list()` and `workspaceClaims.revoke(claimId)`. All three
+  require a `dk_machine_` machine-owner bearer; a human bearer or a delegated
+  agent credential is rejected by the server with `SCOPE_NOT_HELD` (403), which
+  the SDK surfaces unchanged.
+- `workspaceClaims.create` requires an explicit `idempotencyKey`, exactly like
+  `agentCredentials.create`. A fresh result carries `token` and `claimUrl` and
+  `replayed: false`; a replay of the exact same request under the same key
+  carries `token: null`, `claimUrl: null` and `replayed: true`. The claim URL is
+  a one-time secret that carries its token in the URL fragment: deliver it out
+  of band, and never log or persist it. Daykeeper sends no email.
+- The SDK rejects a malformed claim address locally before an idempotency key is
+  bound or an hourly claim window is consumed. It mirrors the contract pattern:
+  lowercase, at most 254 Unicode code points, dot-separated local atoms with no
+  leading, trailing, or doubled dot, and a domain of hyphen-safe labels with at
+  least one dot. The limit is counted in code points, the unit JSON Schema's
+  `maxLength` uses, rather than UTF-16 code units. A create whose response is lost is reported as
+  `outcomeUnknown` and is never retried automatically; repeat it with the same
+  key, or inspect `workspaceClaims.list()` first.
+- `WorkspaceClaimResult` is a union of the new `WorkspaceClaimCreated` and
+  `WorkspaceClaimReplayed` types, discriminated by `replayed`, because the
+  contract now gives `201` and `200` separate schemas. `create()` still returns
+  the single `WorkspaceClaimResult` type; narrowing on `replayed` is what turns
+  `token` and `claimUrl` from `string | null` into `string`.
+- Add the `WorkspaceClaim`, `WorkspaceClaimState`, `CreateWorkspaceClaimInput`,
+  `WorkspaceClaimResult`, `WorkspaceClaimCreated`, `WorkspaceClaimReplayed` and
+  `WorkspaceClaimList` types, and the optional
+  `capabilities().workspaceClaims` boolean. It is `false` when the server has no
+  console origin configured, in which case the routes answer
+  `FEATURE_UNAVAILABLE` (503); it is absent on servers that predate claims.
+- A `WorkspaceClaim` now carries `acceptedAt` and `revokedAt`, both
+  `string | null` and both always present. The server has always sent them; the
+  contract omitted them under `additionalProperties: false`, which made every
+  real claim response invalid. They are non-optional in the types so a caller
+  never has to tell an absent field from an event that has not happened yet.
+- `DaykeeperApiError` gains `retryAfterSeconds`, read from a `Retry-After`
+  header the SDK can parse as a whole number of seconds between 1 and 86400. An
+  HTTP-date or an out-of-range value leaves it `undefined` rather than guessed
+  at, since converting a date needs a trusted clock. It appears in `toJSON()`
+  only when it is known.
+- Any `429` is now reported as retryable, whatever the body's own `retryable`
+  flag says. Claim creation has two limits behind that status — the hourly claim
+  window (`INVITATION_LIMIT_REACHED`) and the generic per-address and
+  per-principal request limiter (`RATE_LIMITED`) — and neither applies a write.
+  A request whose outcome is unknown stays non-retryable, as before.
+- Vendor management contract 1.3.0 from the immutable `daykeeper-openapi` tag
+  `v1.3.0` (commit `067465ed`); see `openapi/SOURCE.md`.
+- No existing method, path, type, or status changes. This release is additive.
+
+## 0.2.1
+
+- Correct entitlement policy types to include the existing `pro` and `scale`
+  server responses alongside `free`. Runtime request behavior is unchanged.
+  TypeScript consumers that assumed `plan` was always `"free"` must handle the
+  paid values too; compilation may now expose that earlier unsafe assumption.
+- Correct the provisioning entitlement schema's allowed/denied branches while
+  retaining their strict object validation.
+- Verify vendored contract SHA-256 and Git blob checksums in the test suite.
+
+## 0.2.0
 
 - Add API-only inbox desired state (`inbox: { type: "api" }`) and
   `inboxes.get(tenantId)`. Matching server capabilities are required. Preparation
@@ -40,8 +204,8 @@
   cookies, authorization headers, redirects, or automatic retries are used.
 - Add a dependency-free WebCrypto ES256 machine owner signer with explicit key
   export, pinned audiences, and intent-bound proofs. Private keys and reveal-once
-  credentials remain caller-managed secrets. These APIs are unreleased and do
-  not enable hosted signup or customer traffic on their own.
+  credentials remain caller-managed secrets. These APIs do not enable hosted
+  signup or customer traffic on their own.
 
 - Require an explicit `idempotencyKey` on `flows.create`, `flows.createVersion`
   and `flows.publishVersion`, send it as `Idempotency-Key`, and expose
@@ -88,7 +252,7 @@
 - Rewrite published source map `sources` so they stay inside `dist` instead of
   pointing at an unpublished `../src`. The original text was already embedded in
   `sourcesContent`, so debugger behavior improves and nothing is lost.
-- Record the exact unreleased canonical contract snapshot. Existing account-only
+- Record the exact canonical contract snapshot. Existing account-only
   and customer-session methods retain their paths and behavior.
 
 ## 0.1.1

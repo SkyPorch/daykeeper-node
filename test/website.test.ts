@@ -7,6 +7,7 @@ import {
   DaykeeperClient,
   DaykeeperTransportError,
   type DaykeeperCapabilities,
+  type EntitlementStatus,
   type InboxChannel,
   type WebsiteChannel,
   type WebsiteInboxSpec,
@@ -159,6 +160,35 @@ test("website and entitlement reads preserve proxy prefixes, encode tenant paths
   }
   assert.deepEqual(Object.keys(client.websiteChannels), ["get"]);
   assert.deepEqual(Object.keys(client.entitlements), ["get"]);
+});
+
+test("entitlement reads accept paid policy plans", async () => {
+  const paid: EntitlementStatus = {
+    organizationId: "10000000-0000-4000-8000-000000000001",
+    state: "active",
+    assignmentVersion: 2,
+    policy: {
+      version: "pro-2026-09-05",
+      plan: "pro",
+      provisional: true,
+      tenantLimit: 5,
+    },
+    tenantProvisioning: {
+      enforced: true,
+      allowed: true,
+      used: 0,
+      limit: 5,
+      remaining: 5,
+      denial: null,
+    },
+    metering: { conversations: "not_enforced", storage: "not_enforced" },
+  };
+  const client = new DaykeeperClient({
+    baseUrl: "https://api.example.test",
+    token: "test-token",
+    fetch: async () => Response.json({ data: paid }),
+  });
+  assert.equal((await client.entitlements.get()).policy?.plan, "pro");
 });
 
 test("website settings remain optional in existing tenant plan requests and server normalization stays authoritative", async () => {

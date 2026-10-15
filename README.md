@@ -1,5 +1,7 @@
 # `@skyporch/daykeeper`
 
+For more about Daykeeper, visit [mydaykeeper.com](https://www.mydaykeeper.com).
+
 The official, zero-runtime-dependency TypeScript and Node.js client for the
 Daykeeper management API. It is designed for both human-built applications and
 autonomous agents: every mutation has a typed input, provisioning uses
@@ -22,11 +24,10 @@ customer-facing browser experiences.
 
 ## Use
 
-### Independent agent signup (unreleased)
+### Independent agent signup (0.2.0+)
 
-The 0.2.0 candidate includes signed signup without a human login. These routes
-must first be enabled by your Daykeeper operator; this is not yet a hosted
-availability announcement. Signup creates a workspace and a scoped seven-day
+Version 0.2.0 includes signed signup without a human login. These routes
+must be enabled by your Daykeeper operator. Signup creates a workspace and a scoped seven-day
 credential, not a provisioned inbox or an active customer route.
 
 Generate an owner key once with `createMachineOwnerKey()` and save its private
@@ -126,11 +127,19 @@ remain separate operator-controlled gates.
 
 Management clients with the conversation scopes can read tenant conversations
 and send plain-text replies through `operatorConversations`. Conversation IDs
-are positive provider display IDs. A reply is sent once; if its outcome is
-unknown, inspect the error before deciding whether to repeat the same call.
+are positive provider display IDs. Reads accept an opaque `cursor` and a
+`limit` from 1 through 100 and return `page.nextCursor` (null on the last
+page); message reads begin with the latest page in chronological order.
+Pagination is opt-in: `page` is returned only when you pass `limit` or
+`cursor`, and servers before contract 1.9.0 never return it. A reply is sent once; if its outcome
+is unknown, inspect the error before deciding whether to repeat the call. A
+reply may include a stable UUID `requestId`; reuse it with the same
+conversation and body to retrieve the original result after an uncertain
+outcome.
 
 ```ts
 const conversations = await daykeeper.operatorConversations.list(tenantId);
+const conversation = await daykeeper.operatorConversations.get(tenantId, 42);
 const history = await daykeeper.operatorConversations.messages(
   tenantId,
   conversations.conversations[0].id,
@@ -139,8 +148,28 @@ const sent = await daykeeper.operatorConversations.reply(
   tenantId,
   history.conversationId,
   "Thanks — we are looking into this now.",
+  { requestId: crypto.randomUUID() },
+);
+await daykeeper.operatorConversations.setStatus(
+  tenantId,
+  history.conversationId,
+  {
+    status: "resolved",
+  },
 );
 ```
+
+Use the same `requestId` if you retry a reply whose outcome is unknown. Generate
+it once per logical reply, not once per network attempt. For older clients, the
+fourth reply argument remains optional and replies without it retain the
+existing behavior.
+
+OAuth clients can read the current person's identity and workspace using
+`daykeeper.profile.get()` and `daykeeper.workspaces.list()`. These methods do
+not accept a workspace ID: the access token determines the active workspace.
+Use the host's reconnect flow to switch. Workspace members can read customer
+email preferences with `daykeeper.customerEmail.get(tenantId)`; a human owner
+can change them with `daykeeper.customerEmail.set(tenantId, { enabled })`.
 
 ```ts
 import { DaykeeperClient } from "@skyporch/daykeeper";
@@ -244,13 +273,12 @@ Use the separately scoped `lifecycle` and `erasure` purposes only from trusted
 service jobs. The SDK returns the short-lived token but never receives the
 control-plane signing key.
 
-## First-inbox preparation (unreleased 0.2.0)
+## First-inbox preparation (0.2.0+)
 
 With a matching server, inspect `daykeeper.entitlements.get()` and
 `daykeeper.capabilities()` before planning an inbox. The provisional
 Free entitlement counts tenant admission only. Its legacy `metering` fields
-do not inspect optional provider enforcement. It is not a shipped self-serve
-free tier.
+do not inspect optional provider enforcement or establish hosted plan pricing.
 
 When `capabilities.apiInboxes?.enabled === true`, add `inbox: { type: "api" }`
 to the tenant plan. This requires no customer website, DNS records or human
@@ -265,11 +293,12 @@ Apply with an idempotency key, then inspect the returned operation and
 `daykeeper.websiteChannels.get(tenantId)`.
 
 The metadata contains no provider secrets. `prepared` is not ready for traffic:
-inspect `trafficEnabled` independently; this server version always returns
-false. There is no SDK activation or credential-export method. These additions
-require a future coordinated SDK/server release and are not in npm 0.1.0.
+inspect `trafficEnabled` independently. Machine-owner API inbox activation is
+a separate `inboxActivations` workflow described above; it requires matching
+server capabilities. Preparation alone never enables traffic. These methods
+are available in 0.2.0 and later, not 0.1.0.
 
-## Provisioning recovery (unreleased 0.2.0)
+## Provisioning recovery (0.2.0+)
 
 After a reload or lost apply response, list your tenants and recover an existing
 tenant's creation operation without submitting another write:
@@ -284,9 +313,9 @@ console.log(operation.id, operation.state);
 Requires both `daykeeper.accounts:read` and `daykeeper.provisioning:read` and
 access to this tenant. This read never retries work or activates traffic.
 An adopted tenant without a creation operation, or an older server, may return 404. Reconcile the original request; do not create another tenant as a fallback.
-The method needs a coordinated SDK/server release and is not in npm 0.1.0.
+The method is available in 0.2.0 and later and requires a matching server.
 
-## Usage inspection (unreleased 0.2.0)
+## Usage inspection (0.2.0+)
 
 ```ts
 const usage = await daykeeper.usage.get({ signal: AbortSignal.timeout(5_000) });
@@ -301,14 +330,14 @@ billable resolutions. Null limits mean unconfigured, never unlimited.
 prove provider enforcement. There are no policy, reset, or activation methods.
 
 An older server may omit `capabilities.usage` or return 404. Do not respond by
-creating another tenant or retrying a mutation. This method needs a coordinated
-server and SDK release; it is not present in npm 0.1.0.
+creating another tenant or retrying a mutation. This method is available in
+0.2.0 and later and requires a matching server.
 
-## Agent credentials (unreleased 0.2.0)
+## Agent credentials (0.2.0+)
 
-Hosted OAuth is the preferred workload identity. When a headless environment
-cannot complete OAuth, a current human organization owner can create a named,
-expiring credential with only the scopes that workload needs:
+A current human organization owner can create a named credential for a server
+or workload, with only the scopes it needs. A credential lasts until it is
+revoked unless you pass `validityDays` (1 through 365):
 
 ```ts
 const result = await daykeeper.agentCredentials.create(
@@ -319,7 +348,8 @@ const result = await daykeeper.agentCredentials.create(
       "daykeeper.flows:read",
       "daykeeper.provisioning:read",
     ],
-    validityDays: 30,
+    // Optional. Omit it and the credential lasts until you revoke it.
+    // validityDays: 90,
   },
   { idempotencyKey: crypto.randomUUID() },
 );
@@ -339,8 +369,17 @@ const agent = new DaykeeperClient({
 });
 ```
 
-`apiKey` is the conventional static-credential path. Use `token` with a token
-provider for hosted OAuth and rotation; configure exactly one of them.
+`apiKey` is the conventional static-credential path. `token` takes a token
+provider instead, for a bearer you refresh yourself; configure exactly one of
+them. Hosted OAuth is not available yet.
+
+A credential without an expiry reports `expiresAt: null`. One created with
+`validityDays` stops working on its `expiresAt` date. From 0.5.0, replace it
+with `agentCredentials.rotate(id, { overlapHours }, { idempotencyKey })`: the
+old secret keeps working for `overlapHours` (default 24), so deploy the new
+token within that window. A key rotating itself must pass `overlapHours` of at
+least 1. On an older server, create a replacement, deploy it, then revoke the
+old one.
 
 `agentCredentials.list()` returns bounded metadata only. Revoke immediately with
 `agentCredentials.revoke(id)`. A repeated exact create request returns the
@@ -349,16 +388,72 @@ secret. After an uncertain response, inspect the list and repeat only the exact
 approved request with the same idempotency key. Never create a different
 credential as an automatic retry.
 
-Agent credentials cannot delegate credential administration, member changes,
-customer lifecycle, or erasure. This API requires a future coordinated
-SDK/server release and a server with `capabilities.agentCredentials.enabled`;
-it is not present in npm 0.1.0 and this source change does not enable it.
+Agent credentials cannot delegate credential administration or member
+changes. Customer lifecycle and erasure scopes are available only on a key
+bound to one tenant with `tenantId` (0.5.0+). These SDK methods are available in 0.2.0 and
+later and require a server with `capabilities.agentCredentials.enabled`.
+Server enablement remains deployment-controlled.
+
+## Workspace claims (0.3.0+)
+
+An agent that created a workspace with a machine-owner credential can hand it to
+a person as owner. All three methods require a `dk_machine_` bearer; a human
+bearer or a delegated agent credential is rejected with `SCOPE_NOT_HELD` (403).
+
+```ts
+const result = await daykeeper.workspaceClaims.create(
+  { email: "gabriel@acme.com" },
+  { idempotencyKey: generateIdempotencyKey() },
+);
+
+if (result.replayed) {
+  // The claim still exists, but its URL was revealed once and is gone.
+} else {
+  // Hand result.claimUrl to the person once, out of band. It is a secret: the
+  // token rides in the URL fragment, so never log it, store it, or put it in a
+  // command line, an issue, or a chat transcript. Daykeeper sends no email.
+}
+```
+
+A fresh claim answers `201` with `replayed: false`, `token` and `claimUrl`. An
+exact repeat under the same key answers `200` with `replayed: true` and both
+fields `null`: the claim still exists, but the URL cannot be recovered. To
+reissue, revoke the pending claim and create a new one under a new key.
+
+The contract gives the two statuses separate schemas, so `WorkspaceClaimResult`
+is a union of `WorkspaceClaimCreated` and `WorkspaceClaimReplayed` discriminated
+by `replayed`. `create()` still returns the single `WorkspaceClaimResult` type;
+narrowing on `replayed` is what makes `token` and `claimUrl` `string` rather
+than `string | null`, so the compiler stops a read of a secret that a replay
+never carries.
+
+`workspaceClaims.list()` returns every pending and accepted claim without
+tokens, newest first; expired claims are hidden. The list is not paginated in
+v1 and is not capped, so read `items` in full. `workspaceClaims.revoke(claimId)` is safe to repeat
+and returns the claim in state `revoked`.
+
+The address must be lowercase and at most 254 characters, with dot-separated
+local atoms — no leading, trailing, or doubled dot — and a domain of hyphen-safe
+labels with at least one dot. The SDK mirrors that contract pattern and refuses
+anything else locally, before an idempotency key is bound or an hourly claim
+window is consumed. The length limit is counted in Unicode code points, the unit
+the contract's `maxLength` uses. Documented server rejections are
+`INVITATION_ALREADY_PENDING` and `ALREADY_A_MEMBER` (409), `RATE_LIMITED` (429),
+and `FEATURE_UNAVAILABLE` (503) when no console origin is configured. Check
+`capabilities().workspaceClaims` before offering the flow. If a create fails
+without a response it is reported as `outcomeUnknown`: inspect
+`workspaceClaims.list()` and repeat only the exact original request with the same
+key. Never create a second claim as an automatic retry.
+
+Accepting a claim does not demote the machine owner; the agent keeps its
+credential and keeps working.
 
 ## API groups
 
 - `capabilities()`
 - `entitlements.get`
 - `agentCredentials.list`, `agentCredentials.create`, `agentCredentials.revoke`
+- `workspaceClaims.create`, `workspaceClaims.list`, `workspaceClaims.revoke`
 - `websiteChannels.get`
 - `inboxes.get`
 - `tenants.plan`, `tenants.apply`, `tenants.list`, `tenants.get`
@@ -381,6 +476,14 @@ response body. `DaykeeperTransportError` separates timeouts, aborts, network
 failures, invalid responses, and local configuration errors. Both carry
 `outcomeUnknown`, which is true only when a mutation may already have been
 applied.
+
+A `429` is always retryable and applies no write, whichever code carries it:
+workspace claim creation is bounded both by an hourly claim window, which
+answers `INVITATION_LIMIT_REACHED`, and by the generic per-address and
+per-principal request limits, which answer `RATE_LIMITED`. When the response
+carries a `Retry-After` header the SDK can read as a whole number of seconds,
+`DaykeeperApiError.retryAfterSeconds` reports it; an HTTP-date or an
+out-of-range value leaves it `undefined`, and you choose your own backoff.
 
 ## Deadlines and cancellation
 
@@ -411,7 +514,15 @@ caller cancellation still use their dedicated error codes.
 
 Version `0.1.0` is the initial contract, and was published by hand with no
 provenance attestation despite the `publishConfig.provenance` declaration; see
-[`RELEASING.md`](RELEASING.md). `0.2.0` is unreleased and breaking. Types are
+[`RELEASING.md`](RELEASING.md). `0.2.0` is published and includes the breaking
+flow-idempotency changes listed in the changelog. Version `0.2.1` corrects
+paid-policy types; see its TypeScript compatibility note. It was staged but
+never approved, so it is not on npm; `0.3.0`, also published by hand, carries
+it and adds workspace claims. `0.4.0` makes agent credentials last until
+revoked by default. `0.5.0` adds agent credential rotation. `0.6.0` adds the
+Daykeeper Dashboard methods (profile, workspaces, customer email, direct
+conversation reads, status updates, opt-in pagination and reply idempotency)
+from contract `v1.9.0`. Types are
 generated from the vendored Daykeeper OpenAPI commit recorded in
 [`openapi/SOURCE.md`](openapi/SOURCE.md); the SDK-to-contract mapping is in
 [`COMPATIBILITY.md`](COMPATIBILITY.md). Releases use the protected,
