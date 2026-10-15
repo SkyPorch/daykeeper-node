@@ -13,8 +13,9 @@ export interface paths {
         };
         /**
          * Read the authenticated person's profile and connected workspace
-         * @description New in 1.9.0. Requires a human OAuth access token issued for this API
-         *     with daykeeper.accounts:read; server keys, agent credentials, and
+         * @description New in 1.9.0. Requires a human OAuth access token (authorization code
+         *     flow) issued for this API with daykeeper.accounts:read; server keys,
+         *     agent credentials, and
          *     tokens issued for another resource receive 401. Returns only the
          *     person and workspace bound to the access token. The caller cannot
          *     select or change the active workspace through this endpoint.
@@ -37,8 +38,9 @@ export interface paths {
         };
         /**
          * List workspaces available to the authenticated person
-         * @description New in 1.9.0. Requires a human OAuth access token issued for this API
-         *     with daykeeper.accounts:read; other credentials receive 401. The
+         * @description New in 1.9.0. Requires a human OAuth access token (authorization code
+         *     flow) issued for this API with daykeeper.accounts:read; other
+         *     credentials receive 401. The
          *     current workspace remains the one bound to the access token. This list
          *     cannot be used to change it; reconnect through the host to use another
          *     workspace.
@@ -874,11 +876,17 @@ export interface paths {
          * @description Requires daykeeper.conversations:read. The tenant is selected only by
          *     the authenticated principal and path; provider credentials and
          *     provider-internal identifiers are never returned. Results are bounded
-         *     to 100 conversations, newest activity first. From 1.9.0 the list is
-         *     paginated: `limit` (default 50) bounds the page and `page.nextCursor`
-         *     continues the same tenant's list until it is null. Servers before
-         *     1.9.0 ignore both parameters and omit `page`. This is a read-only
+         *     to 100 conversations, newest activity first. This is a read-only
          *     operation.
+         *
+         *     Pagination is opt-in from 1.9.0. A request that sends `limit` or
+         *     `cursor` receives a page of at most `limit` (default 50) conversations
+         *     and a `page` object; pass `page.nextCursor` unchanged to continue the
+         *     same tenant's list until it is null. A request that sends neither
+         *     receives the 1.8 representation: no `page` member and one bounded
+         *     list, so a client generated from an earlier contract keeps decoding
+         *     it. Servers before 1.9.0 ignore both parameters and never send
+         *     `page`.
          */
         get: operations["listOperatorConversations"];
         put?: never;
@@ -935,13 +943,16 @@ export interface paths {
         };
         /**
          * Read messages for one support conversation
-         * @description Requires daykeeper.conversations:read. Messages are bounded to 200
-         *     and provider internals are omitted. From 1.9.0 the list is paginated:
-         *     the first page holds the latest messages (`limit`, default 50), sorted
-         *     oldest to newest, and `page.nextCursor` reads older messages until it
+         * @description Requires daykeeper.conversations:read. Messages are bounded to 200,
+         *     sorted oldest to newest, and provider internals are omitted.
+         *
+         *     Pagination is opt-in from 1.9.0. A request that sends `limit` or
+         *     `cursor` receives the latest messages (at most `limit`, default 50)
+         *     and a `page` object; `page.nextCursor` reads older messages until it
          *     is null. A full provider batch keeps `hasMore` true conservatively, so
-         *     a final page may be empty. Servers before 1.9.0 ignore both parameters
-         *     and omit `page`.
+         *     a final page may be empty. A request that sends neither receives the
+         *     1.8 representation with no `page` member. Servers before 1.9.0 ignore
+         *     both parameters and never send `page`.
          */
         get: operations["listOperatorConversationMessages"];
         put?: never;
@@ -991,8 +1002,9 @@ export interface paths {
         put?: never;
         /**
          * Update customer email settings
-         * @description New in 1.9.0 on the bearer API. Requires a human principal holding
-         *     daykeeper.accounts:write (a workspace owner); other principals receive
+         * @description New in 1.9.0 on the bearer API. Requires a human principal (authorization
+         *     code flow) holding daykeeper.accounts:write (a workspace owner); other
+         *     principals receive
          *     403. Accepts exactly `{ "enabled": boolean }` and returns the stored
          *     setting.
          */
@@ -1465,7 +1477,7 @@ export interface components {
             /** Format: uuid */
             tenantId: string;
             conversations: components["schemas"]["OperatorConversation"][];
-            /** @description Optional; absent on servers before 1.9.0. */
+            /** @description Present only when the request sent `limit` or `cursor` (1.9.0 and later). */
             page?: components["schemas"]["OperatorConversationPage"];
         } & {
             [key: string]: unknown;
@@ -1476,7 +1488,7 @@ export interface components {
             /** Format: int64 */
             conversationId: number;
             messages: components["schemas"]["OperatorMessage"][];
-            /** @description Optional; absent on servers before 1.9.0. */
+            /** @description Present only when the request sent `limit` or `cursor` (1.9.0 and later). */
             page?: components["schemas"]["OperatorConversationMessagesPage"];
         } & {
             [key: string]: unknown;
@@ -1566,9 +1578,9 @@ export interface components {
              */
             operatorConversations?: {
                 enabled: boolean;
-                /** @description True when conversation and message reads accept `limit` and `cursor` and return `page`. */
+                /** @description True when conversation and message reads accept `limit` and `cursor` and return `page` for a request that sends either. */
                 pagination?: boolean;
-                /** @description True when PATCH /v1/tenants/{tenantId}/conversations/{conversationId} is available. */
+                /** @description True when GET (read one conversation) and PATCH (set its status) on /v1/tenants/{tenantId}/conversations/{conversationId} are available. Absent or false means neither is. */
                 statusUpdates?: boolean;
                 /** @description True when replies accept `Idempotency-Key`. When false, a reply carrying the header answers FEATURE_UNAVAILABLE (503). */
                 idempotentReplies?: boolean;
