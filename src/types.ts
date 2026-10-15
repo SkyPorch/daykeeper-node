@@ -169,7 +169,7 @@ export interface OperatorMessage {
 export interface OperatorConversationList {
   tenantId: string;
   conversations: readonly OperatorConversation[];
-  /** Absent on servers before contract 1.9.0. */
+  /** Present only when `limit` or `cursor` was passed (contract 1.9.0+). */
   page?: OperatorConversationPage;
 }
 
@@ -183,7 +183,7 @@ export interface OperatorConversationMessages {
   tenantId: string;
   conversationId: number;
   messages: readonly OperatorMessage[];
-  /** Absent on servers before contract 1.9.0. */
+  /** Present only when `limit` or `cursor` was passed (contract 1.9.0+). */
   page?: OperatorConversationMessagesPage;
 }
 

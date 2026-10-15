@@ -130,7 +130,8 @@ and send plain-text replies through `operatorConversations`. Conversation IDs
 are positive provider display IDs. Reads accept an opaque `cursor` and a
 `limit` from 1 through 100 and return `page.nextCursor` (null on the last
 page); message reads begin with the latest page in chronological order.
-Servers before contract 1.9.0 omit `page`. A reply is sent once; if its outcome
+Pagination is opt-in: `page` is returned only when you pass `limit` or
+`cursor`, and servers before contract 1.9.0 never return it. A reply is sent once; if its outcome
 is unknown, inspect the error before deciding whether to repeat the call. A
 reply may include a stable UUID `requestId`; reuse it with the same
 conversation and body to retrieve the original result after an uncertain
@@ -518,7 +519,10 @@ flow-idempotency changes listed in the changelog. Version `0.2.1` corrects
 paid-policy types; see its TypeScript compatibility note. It was staged but
 never approved, so it is not on npm; `0.3.0`, also published by hand, carries
 it and adds workspace claims. `0.4.0` makes agent credentials last until
-revoked by default. `0.5.0` adds agent credential rotation. Types are
+revoked by default. `0.5.0` adds agent credential rotation. `0.6.0` adds the
+Daykeeper Dashboard methods (profile, workspaces, customer email, direct
+conversation reads, status updates, opt-in pagination and reply idempotency)
+from contract `v1.9.0`. Types are
 generated from the vendored Daykeeper OpenAPI commit recorded in
 [`openapi/SOURCE.md`](openapi/SOURCE.md); the SDK-to-contract mapping is in
 [`COMPATIBILITY.md`](COMPATIBILITY.md). Releases use the protected,

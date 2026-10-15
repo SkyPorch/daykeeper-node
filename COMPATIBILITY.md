@@ -9,7 +9,7 @@ a release.
 
 | SDK version | Management contract | Contract tag | Contract commit                            | Notes                                                                                                                                                        |
 | ----------- | ------------------- | ------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 0.6.0       | 1.9.0 (branch pin)  | pending      | pending (`95f1f4c` on openapi#42)          | Profile/workspace reads, customer email, direct conversation reads, status updates, pagination, reply idempotency. Not released; re-pin to `v1.9.0` first.   |
+| 0.6.0       | 1.9.0               | `v1.9.0`     | `316497e9d78ed084d96ab39482451d9cc13bbfc9` | Profile/workspace reads, customer email, direct conversation reads, status updates, opt-in pagination, reply idempotency. Needs `SkyPorch/daykeeper` #313.   |
 | 0.5.0       | 1.6.0               | `v1.6.0`     | `f563df6fffca80d7d2c634e270604b6e61561152` | Adds `agentCredentials.rotate` (needs server migration 0105) and tenant-bound key scopes; `CreateAgentCredentialInput` is stricter.                          |
 | 0.4.0       | 1.4.0               | `v1.4.0`     | `488cc39c3604882742c88b08d90a664e3d82e515` | Agent credentials last until revoked by default; `expiresAt` is nullable.                                                                                    |
 | 0.3.0       | 1.3.0               | `v1.3.0`     | `067465edfc6c94e63867a6dd0d9db02e12683877` | Published by hand with no provenance attestation. Adds machine-owner workspace claims.                                                                       |
@@ -25,8 +25,9 @@ The 0.6.0 methods need a server implementing contract 1.9.0
 `dashboardIdentity.enabled` for `profile`/`workspaces`, `customerEmail.enabled`
 for `customerEmail`, and `operatorConversations.statusUpdates`,
 `operatorConversations.pagination` and `operatorConversations.idempotentReplies`
-for `setStatus`, paging and `requestId`. An older server ignores paging options
-and omits `page`, answers the new routes with 404, and a server without durable
+for `setStatus`, paging and `requestId`. Pagination is opt-in: a 1.9.0 server
+returns `page` only when `limit` or `cursor` is passed. An older server ignores
+paging options and never returns `page`, answers the new routes with 404, and a server without durable
 reply idempotency answers a reply carrying `requestId` with
 `FEATURE_UNAVAILABLE` (503). Every 0.5.0 method is unchanged.
 
