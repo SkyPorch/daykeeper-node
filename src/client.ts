@@ -258,6 +258,13 @@ export class DaykeeperClient {
       claimId: string,
       options?: DaykeeperRequestOptions,
     ) => Promise<WorkspaceClaim>;
+    /**
+     * Always `true` from 0.7.0: `create({})` issues an open claim and `list`
+     * takes `includeOpen`. Absent on earlier SDKs, whose methods look the same
+     * but refuse a claim without an address, so an integrator holding a client
+     * of unknown version can tell without sending a request.
+     */
+    readonly openClaims: true;
   };
   readonly websiteChannels: {
     get: (
@@ -481,6 +488,7 @@ export class DaykeeperClient {
         ),
     };
     this.workspaceClaims = {
+      openClaims: true,
       create: (input, requestOptions) =>
         this.#request("/v1/workspace-claims", {
           method: "POST",

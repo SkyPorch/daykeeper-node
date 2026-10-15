@@ -17,6 +17,9 @@ SDK method wraps.
   pending or revoked, the accepting address once accepted. A null address or
   any other field in the input is still refused locally; an `email` that is
   present but `undefined` counts as no address, as the type allows.
+- `workspaceClaims.openClaims` is `true`, so code holding a client of unknown
+  version (such as the MCP server's injected client) can tell open claims are
+  supported without sending a request; earlier SDKs leave it undefined.
 - `workspaceClaims.list({ includeOpen: true })` also lists open claims nobody
   accepted yet (sent as `?include=open`); without it the server leaves them
   out, as it does for every client built before contract 1.12.0.

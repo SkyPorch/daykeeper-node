@@ -276,6 +276,14 @@ test("an empty input issues an open claim, and its address reads back as null", 
   assert.equal(requests.length, 2);
 });
 
+test("the client says it supports open claims, without a request", () => {
+  const { client: daykeeper, requests } = client(() => {
+    throw new Error("must not dispatch");
+  });
+  assert.equal(daykeeper.workspaceClaims.openClaims, true);
+  assert.equal(requests.length, 0);
+});
+
 test("list asks for open claims only when includeOpen is set", async () => {
   const { client: daykeeper, requests } = client(() =>
     Response.json({ data: { items: [] } }),
