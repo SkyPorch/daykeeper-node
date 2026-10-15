@@ -165,6 +165,47 @@ test("creates reveal-once agent credentials with explicit idempotency", async ()
   assert.equal(result.replayed, false);
 });
 
+test("a credential without an expiry omits validityDays and reads a null expiresAt", async () => {
+  let body: unknown;
+  const client = new DaykeeperClient({
+    baseUrl: "https://api.daykeeper.example",
+    token: "owner-token",
+    fetch: async (input, init) => {
+      body = await new Request(input, init).json();
+      return Response.json(
+        {
+          data: {
+            credential: {
+              id: "30000000-0000-4000-8000-000000000001",
+              organizationId: "10000000-0000-4000-8000-000000000001",
+              name: "Production server",
+              hint: "dk_agent_30000000…CQkJ",
+              scopes: ["daykeeper.accounts:read"],
+              state: "active",
+              expiresAt: null,
+              lastUsedAt: null,
+              revokedAt: null,
+              createdAt: "2026-09-20T00:00:00.000Z",
+            },
+            token: `dk_agent_${"3".repeat(32)}_${"A".repeat(43)}`,
+            replayed: false,
+          },
+        },
+        { status: 201 },
+      );
+    },
+  });
+  const result = await client.agentCredentials.create(
+    { name: "Production server", scopes: ["daykeeper.accounts:read"] },
+    { idempotencyKey: "credential-create-0002" },
+  );
+  assert.deepEqual(body, {
+    name: "Production server",
+    scopes: ["daykeeper.accounts:read"],
+  });
+  assert.equal(result.credential.expiresAt, null);
+});
+
 test("accepts a conventional apiKey without weakening OAuth token providers", async () => {
   let authorization: string | null = null;
   const client = new DaykeeperClient({

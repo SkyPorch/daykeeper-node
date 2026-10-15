@@ -15,7 +15,11 @@ export type {
   DaykeeperRequestOptions,
   DaykeeperTokenRequest,
   DaykeeperTokenProvider,
+  OperatorConversationListOptions,
+  OperatorConversationMessagesOptions,
+  OperatorConversationReplyOptions,
 } from "./client.js";
+export type { OperatorConversationDetail } from "./types.js";
 export { DaykeeperApiError, DaykeeperTransportError } from "./errors.js";
 export type {
   DaykeeperErrorJson,

@@ -13,17 +13,85 @@ export type AgentCredential = Schemas["AgentCredential"];
 export type AgentCredentialPage = Schemas["AgentCredentialPage"];
 type GeneratedCreateAgentCredentialInput =
   Schemas["CreateAgentCredentialInput"];
-export type CreateAgentCredentialInput = Omit<
-  GeneratedCreateAgentCredentialInput,
-  "validityDays"
-> & {
-  /** Defaults to 30 days when omitted. */
+/** Scopes only a tenant-bound key may carry; they require `tenantId`. */
+export type TenantOnlyAgentCredentialScope = Extract<
+  AgentCredentialScope,
+  "daykeeper.lifecycle:write" | "daykeeper.customers:delete"
+>;
+/** Every scope a tenant-bound key (one created with `tenantId`) may carry. */
+export type TenantAgentCredentialScope = Extract<
+  AgentCredentialScope,
+  "daykeeper.customer-sessions:write" | TenantOnlyAgentCredentialScope
+>;
+/** Every scope an organization-wide key (no `tenantId`) may carry. */
+export type OrganizationAgentCredentialScope = Exclude<
+  AgentCredentialScope,
+  TenantOnlyAgentCredentialScope
+>;
+type CreateAgentCredentialFields = {
+  name: GeneratedCreateAgentCredentialInput["name"];
+  /**
+   * Days until the credential expires, 1 through 365. Omitted or `null`, the
+   * credential lasts until it is revoked.
+   */
   validityDays?: GeneratedCreateAgentCredentialInput["validityDays"];
 };
+/**
+ * An organization-wide key, or one bound to a tenant with `tenantId`. The
+ * contract's conditional rules generate no types, so they are spelled out
+ * here: lifecycle and customer-deletion scopes require `tenantId`, and a
+ * tenant-bound key may carry only customer-session, lifecycle and
+ * customer-deletion scopes. The server rejects anything else.
+ */
+export type CreateAgentCredentialInput =
+  | (CreateAgentCredentialFields & {
+      tenantId?: undefined;
+      scopes: OrganizationAgentCredentialScope[];
+    })
+  | (CreateAgentCredentialFields & {
+      tenantId: string;
+      scopes: TenantAgentCredentialScope[];
+    });
 export type CreateAgentCredentialResult =
   Schemas["CreateAgentCredentialResult"];
 export type RevokeAgentCredentialResult =
   Schemas["RevokeAgentCredentialResult"];
+type GeneratedRotateAgentCredentialInput =
+  Schemas["RotateAgentCredentialInput"];
+export type RotateAgentCredentialInput = {
+  /**
+   * Hours the previous key keeps working, 0 through 168. Omitted, the server
+   * default of 24 applies; 0 revokes the previous key at once. A key rotating
+   * itself must pass at least 1: 0 revokes the caller, so a lost response
+   * leaves it no way to recover, and a server may reject it.
+   */
+  overlapHours?: GeneratedRotateAgentCredentialInput["overlapHours"];
+  /**
+   * Days until the new credential expires, 1 through 365; `null` lasts until
+   * it is revoked. Omitted keeps the rotated key's policy. A key rotating
+   * itself never gets a later expiry than it already had.
+   */
+  validityDays?: GeneratedRotateAgentCredentialInput["validityDays"];
+};
+/** `token` is the new key's secret, revealed once; `null` on a replay. */
+export type RotateAgentCredentialResult =
+  Schemas["RotateAgentCredentialResult"];
+export type WorkspaceClaim = Schemas["WorkspaceClaim"];
+export type WorkspaceClaimState = Schemas["WorkspaceClaim"]["state"];
+export type CreateWorkspaceClaimInput = Schemas["CreateWorkspaceClaimInput"];
+/** The result of a fresh claim application, the 201 body. `token` and
+ * `claimUrl` are revealed exactly once and `replayed` is always false. Never
+ * log or persist either value. */
+export type WorkspaceClaimCreated = Schemas["WorkspaceClaimCreated"];
+/** The result of an exact repeat under the same idempotency key, the 200 body.
+ * `token` and `claimUrl` are always null and `replayed` is always true; the
+ * secret cannot be recovered. */
+export type WorkspaceClaimReplayed = Schemas["WorkspaceClaimReplayed"];
+/** A workspace claim result: the union of the fresh and replayed shapes,
+ * discriminated by `replayed`. Narrow on `replayed === false` to reach a
+ * non-null `token` and `claimUrl`. Never log or persist either value. */
+export type WorkspaceClaimResult = Schemas["WorkspaceClaimResult"];
+export type WorkspaceClaimList = Schemas["WorkspaceClaimList"];
 export type DomainVerification = Schemas["DomainVerification"];
 export type DomainVerificationInput = Schemas["DomainVerificationInput"];
 export type MachinePublicKey = Schemas["MachinePublicKey"];
@@ -62,6 +130,11 @@ export type CustomerSessionPurpose =
   Schemas["CreateCustomerSessionInput"]["purpose"];
 export type CreateCustomerSessionInput = Schemas["CreateCustomerSessionInput"];
 export type CustomerSession = Schemas["CustomerSession"];
+export type Profile = Schemas["Profile"];
+export type Workspace = Schemas["Workspace"];
+export type WorkspaceList = Schemas["WorkspaceList"];
+export type CustomerEmail = Schemas["CustomerEmail"];
+export type CustomerEmailInput = Schemas["CustomerEmailInput"];
 
 export type ApiInboxActivationReceipt = Schemas["ApiInboxActivation"];
 export type ApiInboxActivationState = ApiInboxActivationReceipt["state"];
@@ -75,6 +148,15 @@ export interface OperatorConversation {
   lastActivityAt?: string;
 }
 
+export type OperatorConversationStatus = Schemas["OperatorConversationStatus"];
+export type OperatorConversationStatusInput =
+  Schemas["OperatorConversationStatusInput"];
+export type OperatorConversationStatusResult =
+  Schemas["OperatorConversationStatusResult"];
+export type OperatorConversationPage = Schemas["OperatorConversationPage"];
+export type OperatorConversationMessagesPage =
+  Schemas["OperatorConversationMessagesPage"];
+
 export interface OperatorMessage {
   id: number;
   conversationId: number;
@@ -87,12 +169,22 @@ export interface OperatorMessage {
 export interface OperatorConversationList {
   tenantId: string;
   conversations: readonly OperatorConversation[];
+  /** Present only when `limit` or `cursor` was passed (contract 1.9.0+). */
+  page?: OperatorConversationPage;
+}
+
+export interface OperatorConversationDetail {
+  tenantId: string;
+  conversationId: number;
+  conversation: OperatorConversation;
 }
 
 export interface OperatorConversationMessages {
   tenantId: string;
   conversationId: number;
   messages: readonly OperatorMessage[];
+  /** Present only when `limit` or `cursor` was passed (contract 1.9.0+). */
+  page?: OperatorConversationMessagesPage;
 }
 
 export interface OperatorConversationReply {

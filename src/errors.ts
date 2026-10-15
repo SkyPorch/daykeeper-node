@@ -18,6 +18,8 @@ export interface DaykeeperErrorJson {
   nextActions?: readonly string[];
   correlationId?: string;
   fields?: readonly string[];
+  /** Seconds to wait before retrying, from a Retry-After header. */
+  retryAfterSeconds?: number;
 }
 
 /**
@@ -37,6 +39,14 @@ export class DaykeeperApiError extends Error {
   readonly nextActions: readonly string[];
   readonly correlationId?: string;
   readonly fields?: readonly string[];
+  /**
+   * How long the server asked the caller to wait, in seconds, when it sent a
+   * Retry-After header this SDK could read. Undefined when the header was
+   * absent or was an HTTP-date rather than a delay: the SDK does not turn a
+   * date into a duration on the caller's behalf, because a wrong clock would
+   * make that a fabricated number.
+   */
+  readonly retryAfterSeconds?: number;
 
   constructor(options: {
     status: number;
@@ -47,6 +57,7 @@ export class DaykeeperApiError extends Error {
     correlationId?: string;
     fields?: readonly string[];
     outcomeUnknown?: boolean;
+    retryAfterSeconds?: number;
   }) {
     super(options.message);
     this.name = "DaykeeperApiError";
@@ -57,6 +68,7 @@ export class DaykeeperApiError extends Error {
     this.nextActions = options.nextActions ?? [];
     this.correlationId = options.correlationId;
     this.fields = options.fields;
+    this.retryAfterSeconds = options.retryAfterSeconds;
   }
 
   toJSON(): DaykeeperErrorJson {
@@ -70,6 +82,7 @@ export class DaykeeperApiError extends Error {
       nextActions: this.nextActions,
       correlationId: this.correlationId,
       fields: this.fields,
+      retryAfterSeconds: this.retryAfterSeconds,
     });
   }
 }

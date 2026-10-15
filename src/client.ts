@@ -14,6 +14,8 @@ import type {
   CreateFlowInput,
   CreateFlowVersionInput,
   CreateCustomerSessionInput,
+  CustomerEmail,
+  CustomerEmailInput,
   CustomerSession,
   DaykeeperCapabilities,
   EntitlementStatus,
@@ -30,6 +32,8 @@ import type {
   Operation,
   PublishFlowVersionInput,
   RevokeAgentCredentialResult,
+  RotateAgentCredentialInput,
+  RotateAgentCredentialResult,
   Tenant,
   TenantPlan,
   TenantSpec,
@@ -37,8 +41,17 @@ import type {
   DomainVerificationInput,
   ApiInboxActivationReceipt,
   OperatorConversationList,
+  OperatorConversationDetail,
   OperatorConversationMessages,
   OperatorConversationReply,
+  OperatorConversationStatusInput,
+  OperatorConversationStatusResult,
+  Profile,
+  WorkspaceList,
+  WorkspaceClaim,
+  WorkspaceClaimList,
+  WorkspaceClaimResult,
+  CreateWorkspaceClaimInput,
 } from "./types.js";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -49,11 +62,16 @@ const MAX_RESPONSE_BYTES = 1024 * 1024;
 // is resolved against the configured base URL.
 const SEGMENT = "[^/?#]+";
 const ALLOWED_PATHS: readonly RegExp[] = [
+  "/v1/profile",
+  "/v1/workspaces",
   "/v1/capabilities",
   "/v1/entitlements",
   "/v1/usage",
   "/v1/agent-credentials",
   `/v1/agent-credentials/${SEGMENT}/revoke`,
+  `/v1/agent-credentials/${SEGMENT}/rotate`,
+  "/v1/workspace-claims",
+  `/v1/workspace-claims/${SEGMENT}/revoke`,
   "/v1/tenant-plans",
   "/v1/tenants",
   "/v1/tenants:apply",
@@ -72,7 +90,9 @@ const ALLOWED_PATHS: readonly RegExp[] = [
   `/v1/tenants/${SEGMENT}/inbox-activations/${SEGMENT}`,
   `/v1/tenants/${SEGMENT}/inbox-activations/${SEGMENT}/revoke`,
   `/v1/tenants/${SEGMENT}/conversations`,
+  `/v1/tenants/${SEGMENT}/conversations/[1-9][0-9]*`,
   `/v1/tenants/${SEGMENT}/conversations/[1-9][0-9]*/messages`,
+  `/v1/tenants/${SEGMENT}/customer-email`,
   `/v1/tenants/${SEGMENT}/flows`,
   "/v1/email-channels:apply",
   `/v1/operations/${SEGMENT}`,
@@ -141,6 +161,21 @@ export interface DaykeeperRequestOptions {
   signal?: AbortSignal;
 }
 
+export interface OperatorConversationListOptions extends DaykeeperRequestOptions {
+  cursor?: string;
+  limit?: number;
+}
+
+export interface OperatorConversationMessagesOptions extends DaykeeperRequestOptions {
+  cursor?: string;
+  limit?: number;
+}
+
+export interface OperatorConversationReplyOptions extends DaykeeperRequestOptions {
+  /** UUID generated once for this logical reply and reused if its result is uncertain. */
+  requestId?: string;
+}
+
 export interface DaykeeperApplyOptions extends DaykeeperRequestOptions {
   idempotencyKey: string;
 }
@@ -149,6 +184,12 @@ export type DaykeeperIdempotencyOptions = DaykeeperApplyOptions;
 
 export class DaykeeperClient {
   readonly capabilities: () => Promise<DaykeeperCapabilities>;
+  readonly profile: {
+    get: (options?: DaykeeperRequestOptions) => Promise<Profile>;
+  };
+  readonly workspaces: {
+    list: (options?: DaykeeperRequestOptions) => Promise<WorkspaceList>;
+  };
   readonly entitlements: {
     get: (options?: DaykeeperRequestOptions) => Promise<EntitlementStatus>;
   };
@@ -165,6 +206,48 @@ export class DaykeeperClient {
       credentialId: string,
       options?: DaykeeperRequestOptions,
     ) => Promise<RevokeAgentCredentialResult>;
+    /**
+     * Replace a key's secret, keeping its name, scopes and tenant. Call it as
+     * a workspace owner, or with the key being rotated (a key may rotate only
+     * itself). The new token is returned once; the old key keeps working for
+     * `overlapHours` (default 24). Requires an explicit idempotency key: after
+     * an uncertain response, repeat with the same key and input, never a new
+     * one, because a key can be rotated only once.
+     */
+    rotate: (
+      credentialId: string,
+      input: RotateAgentCredentialInput,
+      options: DaykeeperIdempotencyOptions,
+    ) => Promise<RotateAgentCredentialResult>;
+  };
+  readonly workspaceClaims: {
+    /**
+     * Issue an owner claim for the machine bearer's own workspace. The result
+     * carries `token` and `claimUrl` exactly once; a replay of the exact same
+     * request under the same key returns both as null with `replayed: true`.
+     * The claim URL is a secret handoff: never log or persist it.
+     *
+     * `WorkspaceClaimResult` is a union discriminated by `replayed`, so narrow
+     * before reading the secret:
+     *
+     * ```ts
+     * const result = await daykeeper.workspaceClaims.create(
+     *   { email: "gabriel@acme.com" },
+     *   { idempotencyKey: generateIdempotencyKey() },
+     * );
+     * if (result.replayed) return result.claim; // token is null here
+     * hand(result.claimUrl); // string, checked by the compiler
+     * ```
+     */
+    create: (
+      input: CreateWorkspaceClaimInput,
+      options: DaykeeperIdempotencyOptions,
+    ) => Promise<WorkspaceClaimResult>;
+    list: (options?: DaykeeperRequestOptions) => Promise<WorkspaceClaimList>;
+    revoke: (
+      claimId: string,
+      options?: DaykeeperRequestOptions,
+    ) => Promise<WorkspaceClaim>;
   };
   readonly websiteChannels: {
     get: (
@@ -209,6 +292,17 @@ export class DaykeeperClient {
       options?: DaykeeperRequestOptions,
     ) => Promise<CustomerSession>;
   };
+  readonly customerEmail: {
+    get: (
+      tenantId: string,
+      options?: DaykeeperRequestOptions,
+    ) => Promise<CustomerEmail>;
+    set: (
+      tenantId: string,
+      input: CustomerEmailInput,
+      options?: DaykeeperRequestOptions,
+    ) => Promise<CustomerEmail>;
+  };
   readonly domainVerifications: {
     create: (
       tenantId: string,
@@ -250,19 +344,30 @@ export class DaykeeperClient {
   readonly operatorConversations: {
     list: (
       tenantId: string,
-      options?: DaykeeperRequestOptions,
+      options?: OperatorConversationListOptions,
     ) => Promise<OperatorConversationList>;
-    messages: (
+    get: (
       tenantId: string,
       conversationId: number,
       options?: DaykeeperRequestOptions,
+    ) => Promise<OperatorConversationDetail>;
+    messages: (
+      tenantId: string,
+      conversationId: number,
+      options?: OperatorConversationMessagesOptions,
     ) => Promise<OperatorConversationMessages>;
     reply: (
       tenantId: string,
       conversationId: number,
       content: string,
-      options?: DaykeeperRequestOptions,
+      options?: OperatorConversationReplyOptions,
     ) => Promise<OperatorConversationReply>;
+    setStatus: (
+      tenantId: string,
+      conversationId: number,
+      input: OperatorConversationStatusInput,
+      options?: DaykeeperRequestOptions,
+    ) => Promise<OperatorConversationStatusResult>;
   };
   readonly operations: {
     get: (operationId: string) => Promise<Operation>;
@@ -316,6 +421,14 @@ export class DaykeeperClient {
     }
 
     this.capabilities = () => this.#request("/v1/capabilities");
+    this.profile = {
+      get: (requestOptions = {}) =>
+        this.#request("/v1/profile", { signal: requestOptions.signal }),
+    };
+    this.workspaces = {
+      list: (requestOptions = {}) =>
+        this.#request("/v1/workspaces", { signal: requestOptions.signal }),
+    };
     this.entitlements = {
       get: (requestOptions = {}) =>
         this.#request("/v1/entitlements", { signal: requestOptions.signal }),
@@ -345,6 +458,37 @@ export class DaykeeperClient {
             signal: requestOptions.signal,
           },
         ),
+      rotate: (credentialId, input, requestOptions) =>
+        this.#request(
+          `/v1/agent-credentials/${pathSegment(credentialId)}/rotate`,
+          {
+            method: "POST",
+            body: input ?? {},
+            idempotencyKey: requestOptions?.idempotencyKey,
+            requireIdempotencyKey: true,
+            signal: requestOptions?.signal,
+          },
+        ),
+    };
+    this.workspaceClaims = {
+      create: (input, requestOptions) =>
+        this.#request("/v1/workspace-claims", {
+          method: "POST",
+          body: validateWorkspaceClaimInput(input),
+          idempotencyKey: requestOptions?.idempotencyKey,
+          requireIdempotencyKey: true,
+          signal: requestOptions?.signal,
+        }),
+      list: (requestOptions = {}) =>
+        this.#request("/v1/workspace-claims", {
+          signal: requestOptions.signal,
+        }),
+      revoke: (claimId, requestOptions = {}) =>
+        this.#request(`/v1/workspace-claims/${pathSegment(claimId)}/revoke`, {
+          method: "POST",
+          body: {},
+          signal: requestOptions.signal,
+        }),
     };
     this.websiteChannels = {
       get: (tenantId, requestOptions = {}) =>
@@ -408,6 +552,20 @@ export class DaykeeperClient {
           },
         ),
     };
+    // Async so an invalid argument rejects the returned promise instead of
+    // throwing synchronously.
+    this.customerEmail = {
+      get: async (tenantId, requestOptions = {}) =>
+        this.#request(`/v1/tenants/${pathSegment(tenantId)}/customer-email`, {
+          signal: requestOptions.signal,
+        }),
+      set: async (tenantId, input, requestOptions = {}) =>
+        this.#request(`/v1/tenants/${pathSegment(tenantId)}/customer-email`, {
+          method: "POST",
+          body: validateCustomerEmailInput(input),
+          signal: requestOptions.signal,
+        }),
+    };
     this.domainVerifications = {
       create: (tenantId, input, requestOptions) =>
         this.#request(
@@ -460,14 +618,23 @@ export class DaykeeperClient {
         ),
     };
     this.operatorConversations = {
-      list: (tenantId, requestOptions = {}) =>
+      list: async (tenantId, requestOptions = {}) =>
         this.#request(`/v1/tenants/${pathSegment(tenantId)}/conversations`, {
           signal: requestOptions.signal,
+          query: pageQuery(requestOptions),
         }),
+      get: async (tenantId, conversationId, requestOptions = {}) =>
+        this.#request(
+          `/v1/tenants/${pathSegment(tenantId)}/conversations/${positiveSafeInteger(conversationId)}`,
+          { signal: requestOptions.signal },
+        ),
       messages: async (tenantId, conversationId, requestOptions = {}) =>
         this.#request(
           `/v1/tenants/${pathSegment(tenantId)}/conversations/${positiveSafeInteger(conversationId)}/messages`,
-          { signal: requestOptions.signal },
+          {
+            signal: requestOptions.signal,
+            query: pageQuery(requestOptions),
+          },
         ),
       reply: async (tenantId, conversationId, content, requestOptions = {}) =>
         this.#request(
@@ -475,6 +642,19 @@ export class DaykeeperClient {
           {
             method: "POST",
             body: { content: validateOperatorContent(content) },
+            idempotencyKey:
+              requestOptions.requestId === undefined
+                ? undefined
+                : validateOperatorRequestId(requestOptions.requestId),
+            signal: requestOptions.signal,
+          },
+        ),
+      setStatus: async (tenantId, conversationId, input, requestOptions = {}) =>
+        this.#request(
+          `/v1/tenants/${pathSegment(tenantId)}/conversations/${positiveSafeInteger(conversationId)}`,
+          {
+            method: "PATCH",
+            body: validateOperatorConversationStatusInput(input),
             signal: requestOptions.signal,
           },
         ),
@@ -530,7 +710,7 @@ export class DaykeeperClient {
   async #request<T>(
     path: string,
     options: {
-      method?: "GET" | "POST";
+      method?: "GET" | "POST" | "PATCH";
       body?: unknown;
       idempotencyKey?: string;
       requireIdempotencyKey?: boolean;
@@ -768,6 +948,79 @@ function positiveSafeInteger(value: number): number {
   return value;
 }
 
+// The server's bounds for both conversation and message pages (contract 1.9.0).
+const MAX_PAGE_LIMIT = 100;
+const MAX_PAGE_CURSOR_LENGTH = 256;
+
+function pageQuery(value: {
+  cursor?: string;
+  limit?: number;
+}): Readonly<Record<string, string>> {
+  const query: Record<string, string> = {};
+  if (value.cursor !== undefined) {
+    if (
+      typeof value.cursor !== "string" ||
+      value.cursor.length < 1 ||
+      value.cursor.length > MAX_PAGE_CURSOR_LENGTH ||
+      /[\r\n]/.test(value.cursor)
+    ) {
+      throw configurationError("The page cursor is invalid");
+    }
+    query.cursor = value.cursor;
+  }
+  if (value.limit !== undefined) {
+    if (
+      !Number.isInteger(value.limit) ||
+      value.limit < 1 ||
+      value.limit > MAX_PAGE_LIMIT
+    ) {
+      throw configurationError(
+        `Page limit must be from 1 through ${MAX_PAGE_LIMIT}`,
+      );
+    }
+    query.limit = String(value.limit);
+  }
+  return query;
+}
+
+function validateOperatorRequestId(value: string): string {
+  if (
+    typeof value !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value,
+    )
+  ) {
+    throw configurationError("Reply requestId must be a UUID v4");
+  }
+  return value;
+}
+
+function validateCustomerEmailInput(
+  value: CustomerEmailInput,
+): CustomerEmailInput {
+  if (
+    !value ||
+    Object.keys(value).length !== 1 ||
+    typeof value.enabled !== "boolean"
+  ) {
+    throw configurationError("Customer email input requires only enabled");
+  }
+  return { enabled: value.enabled };
+}
+
+function validateOperatorConversationStatusInput(
+  value: OperatorConversationStatusInput,
+): OperatorConversationStatusInput {
+  if (
+    !value ||
+    Object.keys(value).length !== 1 ||
+    (value.status !== "open" && value.status !== "resolved")
+  ) {
+    throw configurationError("Conversation status must be open or resolved");
+  }
+  return { status: value.status };
+}
+
 function validateOperatorContent(value: string): string {
   if (typeof value !== "string" || !value.trim() || value.length > 4_000)
     throw configurationError(
@@ -817,6 +1070,55 @@ function validateDomainVerificationInput(
   )
     throw configurationError("A valid domain verification origin is required");
   return { origin: value.origin };
+}
+
+// CreateWorkspaceClaimInput.email in contract 1.3.0: a lowercase address of at
+// most 254 characters whose local part is one or more dot-separated atoms, so
+// no leading, trailing or doubled dot, and whose domain is one or more labels
+// of at most 63 characters that neither start nor end with a hyphen, with at
+// least one dot. This mirrors the contract pattern exactly rather than
+// inventing a stricter or looser local rule, so a typo never consumes an hourly
+// claim window or binds an idempotency key to a request the server would refuse
+// anyway. The server remains the authority; this only avoids a wasted round
+// trip.
+const CLAIM_EMAIL_PATTERN =
+  /^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
+
+const CLAIM_EMAIL_MAX_CODE_POINTS = 254;
+
+// JSON Schema measures maxLength in Unicode code points, while String.length
+// counts UTF-16 code units, so any character outside the basic multilingual
+// plane counts twice and a locally rejected address could still be within the
+// contract's limit. Count code points, without materialising an array for an
+// arbitrarily long caller string.
+function codePointLength(value: string): number {
+  let count = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const unit = value.charCodeAt(index);
+    if (unit >= 0xd800 && unit <= 0xdbff && index + 1 < value.length) {
+      const next = value.charCodeAt(index + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) index += 1;
+    }
+    count += 1;
+  }
+  return count;
+}
+
+function validateWorkspaceClaimInput(
+  value: CreateWorkspaceClaimInput,
+): CreateWorkspaceClaimInput {
+  if (
+    !value ||
+    Object.keys(value).sort().join(",") !== "email" ||
+    typeof value.email !== "string" ||
+    codePointLength(value.email) > CLAIM_EMAIL_MAX_CODE_POINTS ||
+    !CLAIM_EMAIL_PATTERN.test(value.email)
+  ) {
+    throw configurationError(
+      "A workspace claim requires a lowercased email address of 1 through 254 characters: dot-separated local atoms, then @, then hyphen-safe domain labels with at least one dot",
+    );
+  }
+  return { email: value.email };
 }
 
 function isIpLiteral(hostname: string): boolean {
@@ -904,12 +1206,18 @@ function apiError(response: Response, payload: unknown): DaykeeperApiError {
     message:
       boundedString(body.message, MAX_MESSAGE_LENGTH) ??
       "The Daykeeper API rejected the request",
+    // 429 is retryable whichever code carries it. Claim creation has two
+    // limits behind that status, the hourly claim window
+    // (INVITATION_LIMIT_REACHED) and the generic request limiter
+    // (RATE_LIMITED), and neither applied a write. The status settles it, so a
+    // body that says otherwise does not make the caller give up for good.
+    // An unknown outcome still wins: DaykeeperApiError clears retryable there.
     retryable:
-      typeof body.retryable === "boolean"
+      response.status === 429 ||
+      (typeof body.retryable === "boolean"
         ? body.retryable
-        : response.status === 408 ||
-          response.status === 429 ||
-          response.status >= 500,
+        : response.status === 408 || response.status >= 500),
+    retryAfterSeconds: retryAfterSeconds(response.headers.get("retry-after")),
     nextActions: stringArray(body.nextActions),
     correlationId:
       boundedString(body.correlationId, MAX_CORRELATION_ID_LENGTH) ??
@@ -917,6 +1225,18 @@ function apiError(response: Response, payload: unknown): DaykeeperApiError {
     fields: stringArray(body.fields),
     outcomeUnknown: body.outcomeUnknown === true,
   });
+}
+
+// Retry-After as the contract declares it: a whole number of seconds, at least
+// one. RFC 9110 also allows an HTTP-date, and a proxy may send one; that form
+// is dropped rather than converted, because turning it into a duration needs a
+// trusted clock and a wrong one would hand the caller a made-up number. A day
+// is the ceiling: anything longer is not a retry interval a client should sit
+// on, and refusing it stops an absurd header from driving a sleep.
+function retryAfterSeconds(value: string | null): number | undefined {
+  if (value === null || !/^\d{1,7}$/.test(value.trim())) return undefined;
+  const seconds = Number(value.trim());
+  return seconds >= 1 && seconds <= 86_400 ? seconds : undefined;
 }
 
 // A rejection can come from a proxy, not from Daykeeper. Bound what is copied
