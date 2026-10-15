@@ -227,7 +227,7 @@ export class DaykeeperClient {
      * request under the same key returns both as null with `replayed: true`.
      * The claim URL is a secret handoff: never log or persist it.
      *
-     * Pass `{}` (no `email`) for an open claim (contract 1.10.0): a single-use
+     * Pass `{}` (no `email`) for an open claim (contract 1.12.0): a single-use
      * link any signed-in person may accept once, becoming an owner. Its
      * `claim.email` is null until then. Prefer an address when you know it.
      *
@@ -249,7 +249,7 @@ export class DaykeeperClient {
     ) => Promise<WorkspaceClaimResult>;
     /**
      * Open claims nobody accepted yet (address null) are listed only with
-     * `includeOpen: true` (contract 1.10.0).
+     * `includeOpen: true` (contract 1.12.0).
      */
     list: (
       options?: DaykeeperRequestOptions & { includeOpen?: boolean },
@@ -1121,13 +1121,17 @@ function codePointLength(value: string): number {
 function validateWorkspaceClaimInput(
   value: CreateWorkspaceClaimInput,
 ): CreateWorkspaceClaimInput {
-  // No address is an open claim (contract 1.10.0). Anything else in the body,
-  // or an address that is present but null, is still refused.
+  // No address is an open claim (contract 1.12.0). `email: undefined` counts
+  // as no address: the type allows it, and serialization would drop it.
+  // Anything else in the body, or an address that is null, is still refused.
   if (
     value &&
     typeof value === "object" &&
     !Array.isArray(value) &&
-    Object.keys(value).length === 0
+    Object.keys(value).every(
+      (key) =>
+        key === "email" && (value as { email?: unknown }).email === undefined,
+    )
   )
     return {};
   if (

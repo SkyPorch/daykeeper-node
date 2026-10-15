@@ -247,6 +247,13 @@ test("an empty input issues an open claim, and its address reads back as null", 
   assert.equal(result.claim.email, null);
   assert.equal(result.replayed, false);
   assert.equal(await requests[0]!.text(), "{}");
+  // An address that is present but undefined is no address, as the type allows.
+  const optionalEmail: string | undefined = undefined;
+  await daykeeper.workspaceClaims.create(
+    { email: optionalEmail },
+    { idempotencyKey: "workspace-claim-open-0002" },
+  );
+  assert.equal(await requests[1]!.text(), "{}");
   // A null address, or anything else beside the address, is not an open claim.
   for (const input of [{ email: null }, { open: true }, [], null]) {
     assert.throws(
@@ -258,7 +265,15 @@ test("an empty input issues an open claim, and its address reads back as null", 
       JSON.stringify(input),
     );
   }
-  assert.equal(requests.length, 1);
+  assert.throws(
+    () =>
+      daykeeper.workspaceClaims.create(
+        { email: undefined, open: true } as never,
+        { idempotencyKey: "workspace-claim-open-0003" },
+      ),
+    { code: "INVALID_CONFIGURATION" },
+  );
+  assert.equal(requests.length, 2);
 });
 
 test("list asks for open claims only when includeOpen is set", async () => {

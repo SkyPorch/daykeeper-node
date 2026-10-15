@@ -15,7 +15,8 @@ SDK method wraps.
   single-use link any signed-in person may accept once, becoming an owner.
   `WorkspaceClaim.email` is `string | null`: null while an open claim is
   pending or revoked, the accepting address once accepted. A null address or
-  any other field in the input is still refused locally.
+  any other field in the input is still refused locally; an `email` that is
+  present but `undefined` counts as no address, as the type allows.
 - `workspaceClaims.list({ includeOpen: true })` also lists open claims nobody
   accepted yet (sent as `?include=open`); without it the server leaves them
   out, as it does for every client built before contract 1.12.0.
