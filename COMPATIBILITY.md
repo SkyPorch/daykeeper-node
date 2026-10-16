@@ -9,6 +9,7 @@ a release.
 
 | SDK version | Management contract | Contract tag | Contract commit                            | Notes                                                                                                                                                        |
 | ----------- | ------------------- | ------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0.7.0       | 1.12.0              | `v1.12.0`    | `79df95836faacdc44967d1a5a0867b725a2c2546` | Open workspace claims: `create({})`, `list({ includeOpen })`, nullable `WorkspaceClaim.email`, `workspaceClaims.openClaims`. Needs server migration 0122.    |
 | 0.6.0       | 1.9.0               | `v1.9.0`     | `316497e9d78ed084d96ab39482451d9cc13bbfc9` | Profile/workspace reads, customer email, direct conversation reads, status updates, opt-in pagination, reply idempotency. Needs `SkyPorch/daykeeper` #313.   |
 | 0.5.0       | 1.6.0               | `v1.6.0`     | `f563df6fffca80d7d2c634e270604b6e61561152` | Adds `agentCredentials.rotate` (needs server migration 0105) and tenant-bound key scopes; `CreateAgentCredentialInput` is stricter.                          |
 | 0.4.0       | 1.4.0               | `v1.4.0`     | `488cc39c3604882742c88b08d90a664e3d82e515` | Agent credentials last until revoked by default; `expiresAt` is nullable.                                                                                    |
@@ -19,6 +20,12 @@ a release.
 | 0.1.0       | 0.1.0               | `v1.0.0`     | `35f5bd45fe0c6a6901766543bff90dae6838b965` | Published by hand with no provenance attestation.                                                                                                            |
 
 ## Server requirement
+
+The 0.7.0 open claims (`workspaceClaims.create({})` and
+`list({ includeOpen: true })`) need a server with migration 0122
+(`SkyPorch/daykeeper` #314). An older server refuses a claim without an
+address with `INVALID_INPUT` and rejects `include=open`. Addressed claims and
+every 0.6.0 method are unchanged.
 
 The 0.6.0 methods need a server implementing contract 1.9.0
 (`SkyPorch/daykeeper` PR #313). Check capabilities first:

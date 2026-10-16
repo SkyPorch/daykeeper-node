@@ -1,10 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.7.0
 
-Generated from management contract `1.12.0` (`SkyPorch/daykeeper-openapi`
-branch `claude/open-workspace-claims`, commit `47c27ae`; not tagged yet).
-Needs a server with migration 0122 (`SkyPorch/daykeeper`) for open claims.
+Generated from management contract `1.12.0`, tag `v1.12.0`, commit
+`79df95836faacdc44967d1a5a0867b725a2c2546`. Open claims need a server with migration 0122
+(`SkyPorch/daykeeper` #314). No breaking changes: every 0.6.0 call behaves as
+before, and `list()` without `includeOpen` never returns a null address.
 The regenerated types also carry contract 1.10.0 (web messenger
 `displayName`) and 1.11.0 (host-app context on customer sessions), which no
 SDK method wraps.

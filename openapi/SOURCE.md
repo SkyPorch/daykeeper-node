@@ -1,10 +1,11 @@
 # Contract source
 
 `daykeeper.yaml` is an exact, byte-for-byte copy of `openapi/daykeeper.yaml`
-from `SkyPorch/daykeeper-openapi` branch `claude/open-workspace-claims`,
-commit `47c27ae` (contract `1.12.0`, the open workspace claims change merged
-over upstream main). It is not tagged yet: re-vendor from the `v1.12.0` tag,
-and re-verify both hashes below, before releasing.
+from `SkyPorch/daykeeper-openapi` tag `v1.12.0` (annotated tag object
+`c135c30adab3e98ab2e6048fcb409ebc2867f8cb`), commit
+`79df95836faacdc44967d1a5a0867b725a2c2546` (contract `1.12.0`, the squash merge of
+`daykeeper-openapi` PR #44). Both hashes below were re-verified against the
+tag (`git show v1.12.0:openapi/daykeeper.yaml | cmp`).
 
 - SHA-256: `c7b1ca7f88c384211293bf56b4b377e6a6a0fdec687fd4925f45c6213639474f`
 - Git blob: `2e979c01e9885e4ed2aad615593571b45ae13603`
