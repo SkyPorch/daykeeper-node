@@ -227,6 +227,10 @@ export class DaykeeperClient {
      * request under the same key returns both as null with `replayed: true`.
      * The claim URL is a secret handoff: never log or persist it.
      *
+     * Pass `{}` (no `email`) for an open claim (contract 1.12.0): a single-use
+     * link any signed-in person may accept once, becoming an owner. Its
+     * `claim.email` is null until then. Prefer an address when you know it.
+     *
      * `WorkspaceClaimResult` is a union discriminated by `replayed`, so narrow
      * before reading the secret:
      *
@@ -243,11 +247,24 @@ export class DaykeeperClient {
       input: CreateWorkspaceClaimInput,
       options: DaykeeperIdempotencyOptions,
     ) => Promise<WorkspaceClaimResult>;
-    list: (options?: DaykeeperRequestOptions) => Promise<WorkspaceClaimList>;
+    /**
+     * Open claims nobody accepted yet (address null) are listed only with
+     * `includeOpen: true` (contract 1.12.0).
+     */
+    list: (
+      options?: DaykeeperRequestOptions & { includeOpen?: boolean },
+    ) => Promise<WorkspaceClaimList>;
     revoke: (
       claimId: string,
       options?: DaykeeperRequestOptions,
     ) => Promise<WorkspaceClaim>;
+    /**
+     * Always `true` from 0.7.0: `create({})` issues an open claim and `list`
+     * takes `includeOpen`. Absent on earlier SDKs, whose methods look the same
+     * but refuse a claim without an address, so an integrator holding a client
+     * of unknown version can tell without sending a request.
+     */
+    readonly openClaims: true;
   };
   readonly websiteChannels: {
     get: (
@@ -471,6 +488,7 @@ export class DaykeeperClient {
         ),
     };
     this.workspaceClaims = {
+      openClaims: true,
       create: (input, requestOptions) =>
         this.#request("/v1/workspace-claims", {
           method: "POST",
@@ -482,6 +500,10 @@ export class DaykeeperClient {
       list: (requestOptions = {}) =>
         this.#request("/v1/workspace-claims", {
           signal: requestOptions.signal,
+          query:
+            requestOptions.includeOpen === true
+              ? { include: "open" }
+              : undefined,
         }),
       revoke: (claimId, requestOptions = {}) =>
         this.#request(`/v1/workspace-claims/${pathSegment(claimId)}/revoke`, {
@@ -1107,6 +1129,19 @@ function codePointLength(value: string): number {
 function validateWorkspaceClaimInput(
   value: CreateWorkspaceClaimInput,
 ): CreateWorkspaceClaimInput {
+  // No address is an open claim (contract 1.12.0). `email: undefined` counts
+  // as no address: the type allows it, and serialization would drop it.
+  // Anything else in the body, or an address that is null, is still refused.
+  if (
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.keys(value).every(
+      (key) =>
+        key === "email" && (value as { email?: unknown }).email === undefined,
+    )
+  )
+    return {};
   if (
     !value ||
     Object.keys(value).sort().join(",") !== "email" ||

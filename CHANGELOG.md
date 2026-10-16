@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.7.0
+
+Generated from management contract `1.12.0`, tag `v1.12.0`, commit
+`79df95836faacdc44967d1a5a0867b725a2c2546`. Open claims need a server with migration 0122
+(`SkyPorch/daykeeper` #314). No breaking changes: every 0.6.0 call behaves as
+before, and `list()` without `includeOpen` never returns a null address.
+The regenerated types also carry contract 1.10.0 (web messenger
+`displayName`) and 1.11.0 (host-app context on customer sessions), which no
+SDK method wraps.
+
+### Added
+
+- `workspaceClaims.create({}, { idempotencyKey })` issues an open claim: a
+  single-use link any signed-in person may accept once, becoming an owner.
+  `WorkspaceClaim.email` is `string | null`: null while an open claim is
+  pending or revoked, the accepting address once accepted. A null address or
+  any other field in the input is still refused locally; an `email` that is
+  present but `undefined` counts as no address, as the type allows.
+- `workspaceClaims.openClaims` is `true`, so code holding a client of unknown
+  version (such as the MCP server's injected client) can tell open claims are
+  supported without sending a request; earlier SDKs leave it undefined.
+- `workspaceClaims.list({ includeOpen: true })` also lists open claims nobody
+  accepted yet (sent as `?include=open`); without it the server leaves them
+  out, as it does for every client built before contract 1.12.0.
+
 ## 0.6.0
 
 Generated from management contract `1.9.0`, tag `v1.9.0`, commit

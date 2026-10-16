@@ -229,6 +229,74 @@ test("create requires an idempotency key and a lowercased address", async () => 
   assert.equal(calls, 0);
 });
 
+test("an empty input issues an open claim, and its address reads back as null", async () => {
+  const open = { ...claim, email: null };
+  const { client: daykeeper, requests } = client(
+    () =>
+      new Response(
+        JSON.stringify({
+          data: { claim: open, token, claimUrl, replayed: false },
+        }),
+        { status: 201, headers: { "content-type": "application/json" } },
+      ),
+  );
+  const result = await daykeeper.workspaceClaims.create(
+    {},
+    { idempotencyKey: "workspace-claim-open-0001" },
+  );
+  assert.equal(result.claim.email, null);
+  assert.equal(result.replayed, false);
+  assert.equal(await requests[0]!.text(), "{}");
+  // An address that is present but undefined is no address, as the type allows.
+  const optionalEmail: string | undefined = undefined;
+  await daykeeper.workspaceClaims.create(
+    { email: optionalEmail },
+    { idempotencyKey: "workspace-claim-open-0002" },
+  );
+  assert.equal(await requests[1]!.text(), "{}");
+  // A null address, or anything else beside the address, is not an open claim.
+  for (const input of [{ email: null }, { open: true }, [], null]) {
+    assert.throws(
+      () =>
+        daykeeper.workspaceClaims.create(input as never, {
+          idempotencyKey: "workspace-claim-open-0001",
+        }),
+      { code: "INVALID_CONFIGURATION" },
+      JSON.stringify(input),
+    );
+  }
+  assert.throws(
+    () =>
+      daykeeper.workspaceClaims.create(
+        { email: undefined, open: true } as never,
+        { idempotencyKey: "workspace-claim-open-0003" },
+      ),
+    { code: "INVALID_CONFIGURATION" },
+  );
+  assert.equal(requests.length, 2);
+});
+
+test("the client says it supports open claims, without a request", () => {
+  const { client: daykeeper, requests } = client(() => {
+    throw new Error("must not dispatch");
+  });
+  assert.equal(daykeeper.workspaceClaims.openClaims, true);
+  assert.equal(requests.length, 0);
+});
+
+test("list asks for open claims only when includeOpen is set", async () => {
+  const { client: daykeeper, requests } = client(() =>
+    Response.json({ data: { items: [] } }),
+  );
+  await daykeeper.workspaceClaims.list();
+  await daykeeper.workspaceClaims.list({ includeOpen: true });
+  await daykeeper.workspaceClaims.list({ includeOpen: false });
+  assert.deepEqual(
+    requests.map((request) => new URL(request.url).search),
+    ["", "?include=open", ""],
+  );
+});
+
 test("the local rule accepts real addresses up to the contract's 254", async () => {
   let calls = 0;
   const { client: daykeeper } = client(() => {

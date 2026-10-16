@@ -522,7 +522,8 @@ it and adds workspace claims. `0.4.0` makes agent credentials last until
 revoked by default. `0.5.0` adds agent credential rotation. `0.6.0` adds the
 Daykeeper Dashboard methods (profile, workspaces, customer email, direct
 conversation reads, status updates, opt-in pagination and reply idempotency)
-from contract `v1.9.0`. Types are
+from contract `v1.9.0`. `0.7.0` adds open workspace claims (a claim link
+that names nobody) from contract `v1.12.0`. Types are
 generated from the vendored Daykeeper OpenAPI commit recorded in
 [`openapi/SOURCE.md`](openapi/SOURCE.md); the SDK-to-contract mapping is in
 [`COMPATIBILITY.md`](COMPATIBILITY.md). Releases use the protected,

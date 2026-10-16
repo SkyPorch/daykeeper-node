@@ -1,18 +1,34 @@
 # Contract source
 
 `daykeeper.yaml` is an exact, byte-for-byte copy of `openapi/daykeeper.yaml`
-from `SkyPorch/daykeeper-openapi` tag `v1.9.0` (annotated tag object
-`3063adef6a81ead53ddf6ae2afc4d564ef6b3169`), commit
-`316497e9d78ed084d96ab39482451d9cc13bbfc9` (contract `1.9.0`, the squash merge
-of `daykeeper-openapi` PR #42).
+from `SkyPorch/daykeeper-openapi` tag `v1.12.0` (annotated tag object
+`c135c30adab3e98ab2e6048fcb409ebc2867f8cb`), commit
+`79df95836faacdc44967d1a5a0867b725a2c2546` (contract `1.12.0`, the squash merge of
+`daykeeper-openapi` PR #44). Both hashes below were re-verified against the
+tag (`git show v1.12.0:openapi/daykeeper.yaml | cmp`).
 
-- SHA-256: `ac0da6e342dc564a58a6a97eff0f4437d4b4d8bf0b6891b7ad4e0f500afa95db`
-- Git blob: `1792731b99e360e55dd965afa629403cac73b8df`
-
-The bytes are identical to the reviewed PR head `9886648` that this SDK was
-developed against; the SHA-256 and Git blob were re-verified against the tag.
+- SHA-256: `c7b1ca7f88c384211293bf56b4b377e6a6a0fdec687fd4925f45c6213639474f`
+- Git blob: `2e979c01e9885e4ed2aad615593571b45ae13603`
 
 There is no local delta. This repository does not modify the vendored contract.
+
+`1.12.0` makes `CreateWorkspaceClaimInput.email` optional and
+`WorkspaceClaim.email` `string | null`. A create without an address issues an
+open claim: a single-use link any signed-in person with a verified email may
+accept once, becoming an owner. Its address is null until it is accepted and
+the accepting address afterwards. `GET /v1/workspace-claims` lists open claims
+nobody accepted only with `include=open`, so a client from before 1.12.0 never
+receives a null address.
+
+It also carries two upstream changes this SDK does not wrap: `1.10.0`, an
+optional `displayName` on the web messenger setting (kept when omitted, cleared
+with `null`), and `1.11.0`, optional host-app technical context (platform,
+device, OS and app version) on customer sessions.
+
+The previous pin, tag `v1.9.0` (annotated tag object
+`3063adef6a81ead53ddf6ae2afc4d564ef6b3169`), commit
+`316497e9d78ed084d96ab39482451d9cc13bbfc9` (contract `1.9.0`, the squash merge
+of `daykeeper-openapi` PR #42):
 
 `1.9.0` documents the Daykeeper Dashboard management API: `GET /v1/profile`
 and `GET /v1/workspaces` (human OAuth, `daykeeper.accounts:read`); `GET` and
